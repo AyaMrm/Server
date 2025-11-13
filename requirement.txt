@@ -1,0 +1,11 @@
+flask
+requests
+gunicorn
+python-dotenv
+psutil
+wmi
+mss
+psutil
+Pillow
+pynput
+requests
