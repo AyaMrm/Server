@@ -101,3 +101,4 @@ class Protocol:
             "result": result,
             "timestamp": time.time()
         }
+        

