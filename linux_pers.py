@@ -240,3 +240,4 @@ WantedBy=default.target
 
         except Exception as e:
             return f'Status check failed: {e}'
+

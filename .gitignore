@@ -1,31 +1,29 @@
-# Cache Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Environnements virtuels
+# Virtual Environment
 venv/
-env/
 ENV/
-.venv
-
-# Base de données
-*.db
-*.db-journal
-*.db-wal
-*.db-shm
-c2_server.db*
-test_c2.db*
-
-# Backups
-backups/
-*.bak
-
-# Logs
-*.log
-logs/
+env/
 
 # IDE
 .vscode/
@@ -37,15 +35,25 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Configuration sensible (si vous en avez)
-config_local.py
-*.env
-.env
+# Logs
+*.log
 
-# Exports
-*.json
-!requirements.txt
+# Screenshots captures
+screenshot_*.jpg
+screenshot_*.png
 
-./UserInfo/__pycache__
+# Compiled executables
+*.exe
+client.exe
+server.exe
+
+# Sensitive data
+*.db
+*.sqlite
+keylogs/
+keylogs_*.txt
+
+# Backup files
+*_backup.py
+*.bak
