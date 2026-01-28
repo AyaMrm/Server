@@ -489,6 +489,10 @@ def register_client():
             'ip': client_ip,
             'checkin_count': clients.get(client_id, {}).get('checkin_count', 0) + 1
         }
+        
+        print(f"\n🟢 [REGISTER] Client {client_id} registered from {client_ip}")
+        print(f"[REGISTER] Total clients now: {len(clients)}")
+        print(f"[REGISTER] All clients: {list(clients.keys())}\n")
 
         # Save client to database
         save_client_to_database(client_id, clients[client_id])
@@ -543,7 +547,8 @@ def heartbeat():
 
         if client_id and client_id in clients:
             clients[client_id]['last_seen'] = time.time()
-            clients[client_id]['checkin_count'] = clients[client_id].get('checkin_count', 0) + 1 
+            clients[client_id]['checkin_count'] = clients[client_id].get('checkin_count', 0) + 1
+            print(f"💓 [HEARTBEAT] Client {client_id} checked in (count: {clients[client_id]['checkin_count']})") 
             
 
 
@@ -574,23 +579,32 @@ def heartbeat():
 @app.route('/admin/clients', methods=['GET'])
 def get_clients():
     #Get list of all connected clients
+    print(f"\n[DEBUG] /admin/clients called")
+    print(f"[DEBUG] clients dict keys: {list(clients.keys())}")
+    print(f"[DEBUG] clients dict size: {len(clients)}")
+    print(f"[DEBUG] clients dict content: {clients}")
+    
     clients_list = []
     current_time = time.time()
     
     for client_id, client_data in clients.items():
         last_seen = client_data.get('last_seen', 0)
+        is_online = current_time - last_seen < 10
+        print(f"[DEBUG] Client {client_id}: last_seen={last_seen}, online={is_online}")
+        
         clients_list.append({
             "client_id": client_id,
             "system_info": client_data.get('system_info', {}),
             "first_seen": client_data.get('first_seen'),
             "last_seen": last_seen,
             "ip": client_data.get('ip'),
-            "online": current_time - last_seen < 10,  #online if seen in last 10 seconds
+            "online": is_online,
             "checkin_count": client_data.get('checkin_count', 0),
             "uptime_seconds": current_time - client_data.get('first_seen', current_time)
         })
     
     print(f"[ADMIN] Returning {len(clients_list)} clients")
+    print(f"[DEBUG] Response: {clients_list}\n")
     return jsonify({
         "status": "success",
         "clients": clients_list,
