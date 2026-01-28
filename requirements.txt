@@ -17,7 +17,5 @@ pynput
 
 flask
 flask-cors
-flask_cors
 psycopg2-binary
-
 gunicorn

