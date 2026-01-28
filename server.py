@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import time
 import threading
 from datetime import datetime
@@ -420,8 +420,7 @@ def home():
 def dashboard():
     """Serve the old dashboard"""
     try:
-        with open('dashboard.html', 'r', encoding='utf-8') as f:
-            return f.read()
+        return send_from_directory('.', 'dashboard.html')
     except FileNotFoundError:
         return "Dashboard file not found", 404
 
@@ -430,8 +429,7 @@ def dashboard():
 def database_dashboard():
     """Serve the new database dashboard"""
     try:
-        with open('database_dashboard.html', 'r', encoding='utf-8') as f:
-            return f.read()
+        return send_from_directory('.', 'database_dashboard.html')
     except FileNotFoundError:
         return "Database dashboard file not found", 404
 
