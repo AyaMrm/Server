@@ -1,0 +1,33 @@
+# Dépendances pour le serveur C2 avec base de données
+
+# Serveur Web
+Flask==2.3.0
+Werkzeug==2.3.0
+
+# Base de données (déjà inclus avec Python)
+# sqlite3 est inclus dans la bibliothèque standard
+
+# Utilitaires pour db_manager.py
+tabulate==0.9.0
+
+# Support multi-SGBD (MySQL, PostgreSQL)
+sqlalchemy==2.0.23
+pymysql==1.1.0
+cryptography==41.0.7
+
+# Dépendances existantes du projet
+# (à ajuster selon vos besoins)
+requests==2.31.0
+pynput==1.7.6
+Pillow==10.0.0
+mss==9.0.1
+psutil==5.9.5
+
+# Windows seulement (pour le keylogger)
+# pywin32==306  # Décommenter sur Windows
+
+# Build et Obfuscation
+pyarmor==8.5.9
+pyinstaller==6.3.0
+setuptools==69.0.3
+

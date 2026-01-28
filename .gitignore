@@ -1,0 +1,51 @@
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environnements virtuels
+venv/
+env/
+ENV/
+.venv
+
+# Base de données
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+c2_server.db*
+test_c2.db*
+
+# Backups
+backups/
+*.bak
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Configuration sensible (si vous en avez)
+config_local.py
+*.env
+.env
+
+# Exports
+*.json
+!requirements.txt
+
+./UserInfo/__pycache__
