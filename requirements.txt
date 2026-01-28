@@ -3,6 +3,7 @@ flask
 requests
 gunicorn
 python-dotenv
+psycopg2-binary
 
 # System information and process management
 psutil

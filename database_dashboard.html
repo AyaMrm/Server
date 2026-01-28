@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAT C2 Database Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .tab-button {
+            background: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            color: #667eea;
+            transition: all 0.3s ease;
+        }
+        
+        .tab-button:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .tab-button.active {
+            background: #667eea;
+            color: white;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .tab-content {
+            display: none;
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-online {
+            color: #10b981;
+            font-weight: bold;
+        }
+        
+        .status-offline {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        
+        .refresh-button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+        
+        .refresh-button:hover {
+            background: #059669;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-size: 1.2em;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 10px 0;
+        }
+        
+        .timestamp {
+            color: #6b7280;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗄️ RAT C2 Database Dashboard</h1>
+        
+        <div class="tabs">
+            <button class="tab-button active" onclick="showTab('stats')">📊 Statistics</button>
+            <button class="tab-button" onclick="showTab('clients')">👥 Clients</button>
+            <button class="tab-button" onclick="showTab('keylogs')">⌨️ Keylogs</button>
+            <button class="tab-button" onclick="showTab('commands')">🔧 Commands</button>
+            <button class="tab-button" onclick="showTab('results')">📄 Results</button>
+            <button class="tab-button" onclick="showTab('screenshots')">📸 Screenshots</button>
+        </div>
+        
+        <!-- Statistics Tab -->
+        <div id="stats-tab" class="tab-content active">
+            <button class="refresh-button" onclick="loadStats()">🔄 Refresh Statistics</button>
+            <div id="stats-content" class="loading">Loading statistics...</div>
+        </div>
+        
+        <!-- Clients Tab -->
+        <div id="clients-tab" class="tab-content">
+            <button class="refresh-button" onclick="loadClients()">🔄 Refresh Clients</button>
+            <div id="clients-content" class="loading">Loading clients...</div>
+        </div>
+        
+        <!-- Keylogs Tab -->
+        <div id="keylogs-tab" class="tab-content">
+            <button class="refresh-button" onclick="loadKeylogs()">🔄 Refresh Keylogs</button>
+            <div id="keylogs-content" class="loading">Loading keylogs...</div>
+        </div>
+        
+        <!-- Commands Tab -->
+        <div id="commands-tab" class="tab-content">
+            <button class="refresh-button" onclick="loadCommands()">🔄 Refresh Commands</button>
+            <div id="commands-content" class="loading">Loading commands...</div>
+        </div>
+        
+        <!-- Results Tab -->
+        <div id="results-tab" class="tab-content">
+            <button class="refresh-button" onclick="loadResults()">🔄 Refresh Results</button>
+            <div id="results-content" class="loading">Loading results...</div>
+        </div>
+        
+        <!-- Screenshots Tab -->
+        <div id="screenshots-tab" class="tab-content">
+            <button class="refresh-button" onclick="loadScreenshots()">🔄 Refresh Screenshots</button>
+            <div id="screenshots-content" class="loading">Loading screenshots...</div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        
+        function showTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Deactivate all buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+            
+            // Load data for the tab
+            switch(tabName) {
+                case 'stats':
+                    loadStats();
+                    break;
+                case 'clients':
+                    loadClients();
+                    break;
+                case 'keylogs':
+                    loadKeylogs();
+                    break;
+                case 'commands':
+                    loadCommands();
+                    break;
+                case 'results':
+                    loadResults();
+                    break;
+                case 'screenshots':
+                    loadScreenshots();
+                    break;
+            }
+        }
+        
+        async function loadStats() {
+            const container = document.getElementById('stats-content');
+            container.innerHTML = '<div class="loading">Loading statistics...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/database/stats`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.stats;
+                    container.innerHTML = `
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <h3>Total Clients</h3>
+                                <div class="value">${stats.clients.total}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Online Clients</h3>
+                                <div class="value">${stats.clients.online}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Offline Clients</h3>
+                                <div class="value">${stats.clients.offline}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Total Keylogs</h3>
+                                <div class="value">${stats.keylogs.total}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Total Commands</h3>
+                                <div class="value">${stats.commands.total}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Pending Commands</h3>
+                                <div class="value">${stats.commands.pending}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Command Results</h3>
+                                <div class="value">${stats.results.total}</div>
+                            </div>
+                            <div class="stat-card">
+                                <h3>Screenshots</h3>
+                                <div class="value">${stats.screenshots.total}</div>
+                            </div>
+                        </div>
+                        <h2 style="margin-top: 30px; color: #667eea;">📊 Database Status</h2>
+                        <div class="code-block">
+                            ✅ Database Connection: Active<br>
+                            📦 Tables: clients, keylogs, commands, command_results, screenshots<br>
+                            🔄 Last Refresh: ${new Date().toLocaleString()}
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Failed to load statistics: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadClients() {
+            const container = document.getElementById('clients-content');
+            container.innerHTML = '<div class="loading">Loading clients...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/database/clients`);
+                const data = await response.json();
+                
+                if (data.success && data.clients.length > 0) {
+                    let html = `
+                        <h2>Total Clients: ${data.total}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Client ID</th>
+                                    <th>IP Address</th>
+                                    <th>Operating System</th>
+                                    <th>Hostname</th>
+                                    <th>Status</th>
+                                    <th>Check-in Count</th>
+                                    <th>First Seen</th>
+                                    <th>Last Seen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    data.clients.forEach(client => {
+                        const sysInfo = client.system_info || {};
+                        const status = client.is_online ? 
+                            '<span class="status-online">● ONLINE</span>' : 
+                            '<span class="status-offline">● OFFLINE</span>';
+                        
+                        html += `
+                            <tr>
+                                <td><strong>${client.client_id}</strong></td>
+                                <td>${client.ip_address || 'N/A'}</td>
+                                <td>${sysInfo.os || 'Unknown'}</td>
+                                <td>${sysInfo.hostname || 'Unknown'}</td>
+                                <td>${status}</td>
+                                <td>${client.checkin_count || 0}</td>
+                                <td class="timestamp">${new Date(client.first_seen).toLocaleString()}</td>
+                                <td class="timestamp">${new Date(client.last_seen).toLocaleString()}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p>No clients found in database.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Failed to load clients: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadKeylogs() {
+            const container = document.getElementById('keylogs-content');
+            container.innerHTML = '<div class="loading">Loading keylogs...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/database/keylogs?limit=200`);
+                const data = await response.json();
+                
+                if (data.success && data.keylogs.length > 0) {
+                    let html = `
+                        <h2>Total Keylogs: ${data.total}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Client ID</th>
+                                    <th>Window Title</th>
+                                    <th>Keylog Data</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    data.keylogs.forEach(log => {
+                        html += `
+                            <tr>
+                                <td>${log.id}</td>
+                                <td><strong>${log.client_id}</strong></td>
+                                <td>${log.window_title || 'N/A'}</td>
+                                <td><code>${log.keylog_data}</code></td>
+                                <td class="timestamp">${new Date(log.created_at).toLocaleString()}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p>No keylogs found in database.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Failed to load keylogs: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadCommands() {
+            const container = document.getElementById('commands-content');
+            container.innerHTML = '<div class="loading">Loading commands...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/database/commands?limit=200`);
+                const data = await response.json();
+                
+                if (data.success && data.commands.length > 0) {
+                    let html = `
+                        <h2>Total Commands: ${data.total}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Command ID</th>
+                                    <th>Client ID</th>
+                                    <th>Action</th>
+                                    <th>Command Data</th>
+                                    <th>Status</th>
+                                    <th>Created At</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    data.commands.forEach(cmd => {
+                        const statusColor = cmd.status === 'pending' ? 'orange' : 
+                                          cmd.status === 'completed' ? 'green' : 'gray';
+                        
+                        html += `
+                            <tr>
+                                <td><strong>${cmd.command_id}</strong></td>
+                                <td>${cmd.client_id}</td>
+                                <td><code>${cmd.action}</code></td>
+                                <td><pre style="font-size: 0.85em;">${JSON.stringify(cmd.command_data, null, 2)}</pre></td>
+                                <td style="color: ${statusColor}; font-weight: bold;">${cmd.status}</td>
+                                <td class="timestamp">${new Date(cmd.created_at).toLocaleString()}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p>No commands found in database.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Failed to load commands: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadResults() {
+            const container = document.getElementById('results-content');
+            container.innerHTML = '<div class="loading">Loading command results...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/database/command_results?limit=200`);
+                const data = await response.json();
+                
+                if (data.success && data.results.length > 0) {
+                    let html = `
+                        <h2>Total Command Results: ${data.total}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Command ID</th>
+                                    <th>Client ID</th>
+                                    <th>Action</th>
+                                    <th>Result Data</th>
+                                    <th>Created At</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    data.results.forEach(result => {
+                        html += `
+                            <tr>
+                                <td>${result.id}</td>
+                                <td><strong>${result.command_id}</strong></td>
+                                <td>${result.client_id}</td>
+                                <td><code>${result.action}</code></td>
+                                <td><pre style="font-size: 0.85em; max-height: 200px; overflow-y: auto;">${JSON.stringify(result.result_data, null, 2)}</pre></td>
+                                <td class="timestamp">${new Date(result.created_at).toLocaleString()}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p>No command results found in database.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Failed to load results: ${error.message}</div>`;
+            }
+        }
+        
+        async function loadScreenshots() {
+            const container = document.getElementById('screenshots-content');
+            container.innerHTML = '<div class="loading">Loading screenshots...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/database/screenshots?limit=100&include_data=false`);
+                const data = await response.json();
+                
+                if (data.success && data.screenshots.length > 0) {
+                    let html = `
+                        <h2>Total Screenshots: ${data.total}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Client ID</th>
+                                    <th>Filename</th>
+                                    <th>Dimensions</th>
+                                    <th>Quality</th>
+                                    <th>Size (KB)</th>
+                                    <th>Created At</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+                    
+                    data.screenshots.forEach(screenshot => {
+                        html += `
+                            <tr>
+                                <td>${screenshot.id}</td>
+                                <td><strong>${screenshot.client_id}</strong></td>
+                                <td>${screenshot.filename}</td>
+                                <td>${screenshot.width} x ${screenshot.height}</td>
+                                <td>${screenshot.quality}%</td>
+                                <td>${screenshot.size_kb}</td>
+                                <td class="timestamp">${new Date(screenshot.created_at).toLocaleString()}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</tbody></table>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p>No screenshots found in database.</p>';
+                }
+            } catch (error) {
+                container.innerHTML = `<div class="error">Failed to load screenshots: ${error.message}</div>`;
+            }
+        }
+        
+        // Load statistics on page load
+        window.addEventListener('load', () => {
+            loadStats();
+        });
+        
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            const activeTab = document.querySelector('.tab-content.active');
+            if (activeTab) {
+                const tabId = activeTab.id.replace('-tab', '');
+                switch(tabId) {
+                    case 'stats': loadStats(); break;
+                    case 'clients': loadClients(); break;
+                    case 'keylogs': loadKeylogs(); break;
+                    case 'commands': loadCommands(); break;
+                    case 'results': loadResults(); break;
+                    case 'screenshots': loadScreenshots(); break;
+                }
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
