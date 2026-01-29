@@ -8,3 +8,4 @@ pyinstaller
 pynput
 pillow
 sqlalchemy
+psycopg2-binary
