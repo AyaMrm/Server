@@ -1,21 +1,6 @@
-# Server dependencies
 flask
 requests
 gunicorn
 python-dotenv
-psycopg2-binary
-
-# System information and process management
 psutil
-wmi; sys_platform == 'win32'
-pywin32; sys_platform == 'win32'
-
-# Screenshot and keyboard monitoring
-pillow
-pynput
-
-
-flask
-flask-cors
-psycopg2-binary
-gunicorn
+wmi
