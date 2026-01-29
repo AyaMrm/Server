@@ -1,8 +1,23 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, Boolean, DateTime, JSON, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, Boolean, DateTime, ForeignKey, TypeDecorator
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import json
+
+# Custom JSON type for SQLite compatibility
+class JSONEncoded(TypeDecorator):
+    impl = Text
+    cache_ok = True
+    
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return json.dumps(value)
+        return None
+    
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            return json.loads(value)
+        return None
 
 Base = declarative_base()
 
@@ -21,7 +36,7 @@ class Client(Base):
     last_seen = Column(DateTime, default=datetime.utcnow)
     checkin_count = Column(Integer, default=0)
     online = Column(Boolean, default=True)
-    system_info = Column(JSON)
+    system_info = Column(JSONEncoded)
     
     # Relations
     heartbeats = relationship("Heartbeat", back_populates="client", cascade="all, delete-orphan")
@@ -65,12 +80,12 @@ class Command(Base):
     command_id = Column(String(100), unique=True, nullable=False, index=True)
     client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
     action = Column(String(100), nullable=False, index=True)
-    data = Column(JSON)
+    data = Column(JSONEncoded)
     status = Column(String(50), default='pending', index=True)  # pending, sent, completed, failed
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     sent_at = Column(DateTime)
     completed_at = Column(DateTime)
-    result = Column(JSON)
+    result = Column(JSONEncoded)
     error = Column(Text)
     
     client = relationship("Client", back_populates="commands")
@@ -147,7 +162,7 @@ class Event(Base):
     client_id = Column(String(100), ForeignKey('clients.client_id'), index=True)
     event_type = Column(String(50), nullable=False, index=True)  # register, disconnect, error, etc.
     description = Column(Text)
-    data = Column(JSON)
+    data = Column(JSONEncoded)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     severity = Column(String(20), default='info', index=True)  # info, warning, error, critical
     
