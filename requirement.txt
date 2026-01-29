@@ -9,3 +9,13 @@ psutil
 Pillow
 pynput
 requests
+flask
+requests
+gunicorn
+python-dotenv
+psutil
+wmi
+pyinstaller
+pynput
+pillow
+sqlalchemy
