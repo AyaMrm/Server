@@ -598,11 +598,35 @@
         
         async function loadClients() {
             try {
+                console.log('[DEBUG] Loading clients...');
                 const response = await fetch(`${API_BASE}/admin/clients`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
+                console.log('[DEBUG] Clients data:', data);
+                
                 const clients = data.clients || [];
+                console.log(`[DEBUG] Found ${clients.length} clients`);
                 
                 const clientsList = document.getElementById('clients-list');
+                
+                if (clients.length === 0) {
+                    clientsList.innerHTML = `
+                        <div style="padding: 20px; text-align: center; color: #6b7280;">
+                            <p style="font-weight: 600; margin-bottom: 10px;">❌ Aucun client connecté</p>
+                            <p style="font-size: 0.9em;">Démarrez un client avec:<br>
+                            <code style="background: #f3f4f6; padding: 5px; border-radius: 4px; display: block; margin-top: 5px;">
+                            python client.py
+                            </code>
+                            </p>
+                        </div>
+                    `;
+                    return;
+                }
+                
                 clientsList.innerHTML = '';
                 
                 clients.forEach(client => {
@@ -624,8 +648,22 @@
                     clientsList.appendChild(div);
                 });
                 
+                console.log('[DEBUG] ✅ Clients loaded successfully');
+                
             } catch (error) {
+                console.error('[DEBUG] ❌ Error loading clients:', error);
                 showAlert('Erreur chargement clients: ' + error.message, 'error');
+                
+                const clientsList = document.getElementById('clients-list');
+                clientsList.innerHTML = `
+                    <div style="padding: 20px; text-align: center; color: #ef4444;">
+                        <p style="font-weight: 600;">❌ Erreur de connexion</p>
+                        <p style="font-size: 0.9em; margin-top: 10px;">
+                            Le serveur ne répond pas.<br>
+                            Vérifiez que le serveur est démarré.
+                        </p>
+                    </div>
+                `;
             }
         }
         
@@ -655,21 +693,42 @@
         // ==================== PROCESS MANAGEMENT ====================
         
         async function listProcesses() {
-            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            if (!selectedClient) return showAlert('❌ Sélectionnez un client d\'abord!', 'error');
             
             try {
-                showAlert('Récupération des processus...', 'info');
+                console.log('[DEBUG] Listing processes for client:', selectedClient);
+                showAlert('📋 Envoi commande au client...', 'info');
+                
                 const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({action: 'get_all_processes'})
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
+                console.log('[DEBUG] Command response:', data);
+                
+                if (!data.command_id) {
+                    throw new Error('Pas de command_id dans la réponse');
+                }
+                
                 const commandId = data.command_id;
+                console.log('[DEBUG] Command ID:', commandId);
                 
                 // Wait for result
                 await waitForResult(commandId, result => {
+                    console.log('[DEBUG] Process result:', result);
+                    
+                    if (result.error) {
+                        document.getElementById('processes-output').textContent = result.error;
+                        showAlert('❌ Erreur: ' + result.error, 'error');
+                        return;
+                    }
+                    
                     if (Array.isArray(result)) {
                         let output = `📋 ${result.length} Processus:\n\n`;
                         output += `${'PID'.padEnd(8)} ${'Name'.padEnd(25)} ${'CPU%'.padEnd(8)} ${'Mem%'.padEnd(8)} ${'Status'.padEnd(12)}\n`;
@@ -686,13 +745,19 @@
                         if (result.length > 50) output += `\n... et ${result.length - 50} autres processus`;
                         
                         document.getElementById('processes-output').textContent = output;
-                        showAlert('Processus chargés', 'success');
+                        showAlert('✅ Processus chargés avec succès!', 'success');
                     } else {
                         document.getElementById('processes-output').textContent = JSON.stringify(result, null, 2);
+                        showAlert('✅ Résultat reçu', 'success');
                     }
                 });
             } catch (error) {
-                showAlert('Erreur: ' + error.message, 'error');
+                console.error('[DEBUG] Error in listProcesses:', error);
+                showAlert('❌ Erreur: ' + error.message, 'error');
+                document.getElementById('processes-output').textContent = 
+                    `ERREUR: ${error.message}\n\n` +
+                    `Client sélectionné: ${selectedClient}\n` +
+                    `Vérifiez que le client est bien connecté et en ligne.`;
             }
         }
         
@@ -1245,24 +1310,56 @@
         // ==================== HELPER FUNCTIONS ====================
         
         async function waitForResult(commandId, callback) {
-            for (let i = 0; i < 24; i++) {
-                await new Promise(resolve => setTimeout(resolve, 2500));
+            console.log(`[DEBUG] Attente résultat pour command ${commandId}...`);
+            showAlert(`Commande envoyée, attente réponse client... (ID: ${commandId.slice(0, 8)})`, 'info');
+            
+            // Try for up to 60 seconds (24 attempts * 2.5s = 60s)
+            for (let i = 0; i < 30; i++) {
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
                 
                 try {
+                    console.log(`[DEBUG] Tentative ${i + 1}/30 pour command ${commandId}`);
                     const response = await fetch(`${API_BASE}/admin/command_result/${commandId}`);
+                    
+                    console.log(`[DEBUG] Response status: ${response.status}`);
+                    
                     if (response.status === 200) {
                         const data = await response.json();
+                        console.log('[DEBUG] Response data:', data);
+                        
                         if (data.result) {
+                            console.log('[DEBUG] ✅ Résultat reçu!');
                             callback(data.result);
                             return;
                         }
+                    } else if (response.status === 404) {
+                        console.log('[DEBUG] Résultat pas encore disponible...');
+                    } else {
+                        console.error('[DEBUG] Erreur response:', response.status);
                     }
                 } catch (error) {
-                    console.error('Error waiting for result:', error);
+                    console.error('[DEBUG] Erreur dans waitForResult:', error);
+                }
+                
+                // Update progress
+                if (i % 5 === 0 && i > 0) {
+                    showAlert(`Attente réponse... (${i * 2}s écoulées)`, 'info');
                 }
             }
             
-            showAlert('Timeout waiting for result', 'error');
+            console.error('[DEBUG] ❌ Timeout - Aucune réponse du client après 60 secondes');
+            showAlert('⚠️ Timeout: Le client ne répond pas. Vérifiez qu\'un client est connecté!', 'error');
+            
+            // Show helpful message
+            const output = 'ERREUR: Timeout - Le client ne répond pas.\n\n' +
+                          'Vérifications:\n' +
+                          '1. Un client est-il connecté? (vérifiez la sidebar)\n' +
+                          '2. Le client est-il en ligne? (🟢 vert)\n' +
+                          '3. Le serveur affiche-t-il des heartbeats du client?\n' +
+                          '4. Essayez de redémarrer le client\n\n' +
+                          `Command ID: ${commandId}`;
+            
+            callback({error: output});
         }
         
         function formatSize(bytes) {
