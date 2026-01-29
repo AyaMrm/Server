@@ -18,10 +18,6 @@ keylogs_storage = {}
 
 encryptor = Encryptor(ENCRYPTION_KEY)
 
-# Start cleanup thread
-cleanup_thread = threading.Thread(target=cleanup_old_data, daemon=True)
-cleanup_thread.start()
-
 
 @app.route('/')
 def home():
