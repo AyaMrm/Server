@@ -420,7 +420,7 @@ def home():
 def control_panel():
     """Serve the unified control panel"""
     try:
-        return send_from_directory('.', 'control_panel.html')
+        return send_from_directory('.', 'control_panel_v2.html')
     except FileNotFoundError:
         return "Control panel file not found", 404
 
