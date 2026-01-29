@@ -7,3 +7,4 @@ wmi
 pyinstaller
 pynput
 pillow
+sqlalchemy
