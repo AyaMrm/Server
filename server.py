@@ -163,13 +163,17 @@ def get_clients():
     #Get list of all connected clients from memory
     clients_list = list(clients.values())
     
-    # Add uptime calculation
+    # Add uptime and online status calculation
     current_time = time.time()
     for client in clients_list:
+        # Calculate uptime
         if client.get('registered_at'):
             client['uptime_seconds'] = current_time - client['registered_at']
         else:
             client['uptime_seconds'] = 0
+        
+        # Calculate online status (last seen < 60 seconds)
+        client['online'] = (current_time - client.get('last_seen', 0)) < 60
     
     print(f"[ADMIN] Returning {len(clients_list)} clients")
     return jsonify({
