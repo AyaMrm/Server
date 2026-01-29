@@ -4,3 +4,6 @@ gunicorn
 python-dotenv
 psutil
 wmi
+pyinstaller
+pynput
+pillow

