@@ -20,3 +20,5 @@ pynput
 pillow
 sqlalchemy
 psycopg2
+os
+psycopg2-binary
