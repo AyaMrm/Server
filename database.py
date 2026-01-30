@@ -104,17 +104,24 @@ class DatabaseManager:
     def register_client(self, client_id, system_info, ip):
         """Register or update a client with detailed machine information"""
         if not self.conn:
+            print(f"[DB] No connection - cannot register client {client_id}")
             return False
         
         try:
+            print(f"[DB] Attempting to register client {client_id}")
+            print(f"[DB] System info keys: {list(system_info.keys())}")
+            
             # Extract detailed information from system_info with safe fallbacks
             platform_info = system_info.get('platform', {})
             hardware_info = system_info.get('hardware', {})
             user_info = system_info.get('user', {})
             privileges_info = system_info.get('privileges', {})
             
+            print(f"[DB] Platform info: {bool(platform_info)}, Hardware: {bool(hardware_info)}")
+            
             # Fallback: check if old format is used
             if not platform_info and 'operating_system' in system_info:
+                print("[DB] Using old format fallback")
                 # Old format detected - extract from it
                 os_info = system_info.get('operating_system', {})
                 user_data = system_info.get('user', {})
@@ -139,6 +146,9 @@ class DatabaseManager:
                     'computer_name': user_data.get('computer_name', 'Unknown')
                 }
                 privileges_info = system_info.get('privileges', {})
+                print(f"[DB] Converted old format - hostname: {platform_info.get('hostname')}")
+            
+            print(f"[DB] Final values - hostname: {platform_info.get('hostname')}, os: {platform_info.get('system')}")
             
             cursor = self.conn.cursor()
             cursor.execute("""
@@ -181,13 +191,14 @@ class DatabaseManager:
                 hardware_info.get('total_ram', 0),
                 user_info.get('username', 'Unknown'),
                 user_info.get('computer_name', 'Unknown'),
-                privileges_info.get('is_admin', False),
-                json.dumps(system_info)
-            ))
+            affected_rows = cursor.rowcount
             cursor.close()
-            print(f"[DB] Client {client_id} registered successfully")
+            print(f"[DB] Client {client_id} registered successfully (affected rows: {affected_rows})")
             return True
         except Exception as e:
+            print(f"[DB] ERROR registering client {client_id}: {e}")
+            import traceback
+            traceback.print_exc(
             print(f"[DB] Error registering client: {e}")
             import traceback
             print(f"[DB] Traceback: {traceback.format_exc()}")
