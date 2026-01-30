@@ -1,5 +1,10 @@
-import os 
-HOST = "https://server-70ts.onrender.com/"
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+HOST = "https://server-70ts.onrender.com"
 
 BUFFER_SIZE = 4096
 ENCRYPTION_KEY = "vErY_SeCrEt_KeY.57976461314853"
@@ -10,6 +15,3 @@ CHUNK_SIZE = 8192
 # Exemple Supabase: postgresql://postgres.xxxx:password@aws-0-us-east-1.pooler.supabase.com:6543/postgres
 DATABASE_URL = os.getenv('DATABASE_URL', None)
 USE_DATABASE = os.getenv('USE_DATABASE', 'true').lower() == 'true'
-
-import os
-
