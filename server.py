@@ -380,14 +380,21 @@ def get_command_result(command_id):
                 
                 if result_row:
                     if result_row['status'] == 'failed':
+                        print(f"[RESULT] Command {cmd_id} failed: {result_row['error_message']}")
                         return jsonify({
                             "success": False, 
                             "error": result_row['error_message']
                         }), 500
+                    
+                    print(f"[RESULT] Command {cmd_id} success. Result type: {type(result_row['result_data'])}")
+                    print(f"[RESULT] Result preview: {str(result_row['result_data'])[:200]}")
+                    
                     return jsonify({
                         "success": True, 
                         "result": result_row['result_data']
                     })
+                else:
+                    print(f"[RESULT] Command {cmd_id} not found in database")
         
         # Fallback to in-memory storage
         result = command_results.get(command_id)
