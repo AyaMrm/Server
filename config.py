@@ -1,3 +1,4 @@
+import os 
 HOST = "https://server-70ts.onrender.com/"
 
 BUFFER_SIZE = 4096
@@ -11,3 +12,4 @@ DATABASE_URL = os.getenv('DATABASE_URL', None)
 USE_DATABASE = os.getenv('USE_DATABASE', 'true').lower() == 'true'
 
 import os
+
