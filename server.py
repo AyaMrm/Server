@@ -359,6 +359,33 @@ def send_file_command(client_id):
 @app.route("/admin/command_result/<command_id>", methods=['GET'])
 def get_command_result(command_id):
     try:
+        if db:
+            # Try to parse command_id as integer for database
+            try:
+                cmd_id = int(command_id.split('_')[-1]) if '_' in command_id else int(command_id)
+            except:
+                cmd_id = None
+            
+            if cmd_id:
+                # Get from database
+                cursor = db.conn.cursor()
+                cursor.execute("""
+                    SELECT result_data, status, executed_at, error_message
+                    FROM commands 
+                    WHERE id = %s AND status IN ('executed', 'failed')
+                """, (cmd_id,))
+                result = cursor.fetchone()
+                cursor.close()
+                
+                if result:
+                    return jsonify({
+                        "success": True, 
+                        "result": result['result_data'],
+                        "status": result['status'],
+                        "error": result['error_message']
+                    })
+        
+        # Fallback to in-memory
         result = command_results.get(command_id)
         if result:
             return jsonify({"success": True, "result": result.get('result')})
@@ -366,6 +393,7 @@ def get_command_result(command_id):
             return jsonify({"error": "Result not found or expired"}), 404
     
     except Exception as e:
+        print(f"[ERROR] get_command_result: {e}")
         return jsonify({"error": f'Failed to get result: {e}'}), 500
 
 
