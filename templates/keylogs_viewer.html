@@ -84,10 +84,10 @@
         {% if logs %} {% for log in logs %}
         <div
           class="log-entry"
-          data-searchable="{{ log.key|lower }} {{ log.window|lower }}"
+          data-searchable="{{ log.keystroke|lower }} {{ log.window|lower }}"
         >
           <div class="log-timestamp">⏰ {{ log.timestamp }}</div>
-          <div class="log-key">{{ log.key }}</div>
+          <div class="log-key">{{ log.keystroke }}</div>
           <div class="log-window">🪟 Fenêtre: {{ log.window }}</div>
         </div>
         {% endfor %} {% else %}
@@ -138,4 +138,5 @@
     </script>
   </body>
 </html>
+
 
