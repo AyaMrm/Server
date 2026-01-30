@@ -107,11 +107,38 @@ class DatabaseManager:
             return False
         
         try:
-            # Extract detailed information from system_info
+            # Extract detailed information from system_info with safe fallbacks
             platform_info = system_info.get('platform', {})
             hardware_info = system_info.get('hardware', {})
             user_info = system_info.get('user', {})
             privileges_info = system_info.get('privileges', {})
+            
+            # Fallback: check if old format is used
+            if not platform_info and 'operating_system' in system_info:
+                # Old format detected - extract from it
+                os_info = system_info.get('operating_system', {})
+                user_data = system_info.get('user', {})
+                arch_info = system_info.get('architecture', {})
+                cpu_info = arch_info.get('CPU', {}) if arch_info else {}
+                mem_info = arch_info.get('Memory', {}) if arch_info else {}
+                
+                platform_info = {
+                    'hostname': user_data.get('computer_name', 'Unknown'),
+                    'system': os_info.get('System', 'Unknown'),
+                    'version': os_info.get('Version', 'Unknown'),
+                    'release': os_info.get('Release', 'Unknown'),
+                    'machine': os_info.get('Machine', cpu_info.get('Architecture', 'Unknown'))
+                }
+                hardware_info = {
+                    'cpu_count': cpu_info.get('Physical Cores', 0),
+                    'cpu_model': cpu_info.get('Model', 'Unknown'),
+                    'total_ram': int(mem_info.get('Total GB', 0) * 1024 * 1024 * 1024) if mem_info else 0
+                }
+                user_info = {
+                    'username': user_data.get('username', 'Unknown'),
+                    'computer_name': user_data.get('computer_name', 'Unknown')
+                }
+                privileges_info = system_info.get('privileges', {})
             
             cursor = self.conn.cursor()
             cursor.execute("""
@@ -158,9 +185,12 @@ class DatabaseManager:
                 json.dumps(system_info)
             ))
             cursor.close()
+            print(f"[DB] Client {client_id} registered successfully")
             return True
         except Exception as e:
             print(f"[DB] Error registering client: {e}")
+            import traceback
+            print(f"[DB] Traceback: {traceback.format_exc()}")
             return False
     
     def update_client_heartbeat(self, client_id):
