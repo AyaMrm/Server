@@ -360,32 +360,36 @@ def send_file_command(client_id):
 def get_command_result(command_id):
     try:
         if db:
-            # Try to parse command_id as integer for database
+            # Extract numeric ID from command_id (e.g., "file_cmd_20" -> 20, "cmd_15" -> 15)
             try:
-                cmd_id = int(command_id.split('_')[-1]) if '_' in command_id else int(command_id)
+                parts = command_id.split('_')
+                cmd_id = int(parts[-1])
             except:
                 cmd_id = None
             
             if cmd_id:
-                # Get from database
+                # Query database for command result
                 cursor = db.conn.cursor()
                 cursor.execute("""
-                    SELECT result_data, status, executed_at, error_message
+                    SELECT result_data, status, error_message
                     FROM commands 
                     WHERE id = %s AND status IN ('executed', 'failed')
                 """, (cmd_id,))
-                result = cursor.fetchone()
+                result_row = cursor.fetchone()
                 cursor.close()
                 
-                if result:
+                if result_row:
+                    if result_row['status'] == 'failed':
+                        return jsonify({
+                            "success": False, 
+                            "error": result_row['error_message']
+                        }), 500
                     return jsonify({
                         "success": True, 
-                        "result": result['result_data'],
-                        "status": result['status'],
-                        "error": result['error_message']
+                        "result": result_row['result_data']
                     })
         
-        # Fallback to in-memory
+        # Fallback to in-memory storage
         result = command_results.get(command_id)
         if result:
             return jsonify({"success": True, "result": result.get('result')})
@@ -393,7 +397,9 @@ def get_command_result(command_id):
             return jsonify({"error": "Result not found or expired"}), 404
     
     except Exception as e:
-        print(f"[ERROR] get_command_result: {e}")
+        print(f"[ERROR] get_command_result({command_id}): {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": f'Failed to get result: {e}'}), 500
 
 
