@@ -127,16 +127,26 @@
                 
                 showNotification('Screenshot requested. Waiting for response...', 'info');
                 
-                // Wait for result
-                await new Promise(resolve => setTimeout(resolve, 3000));
+                // Wait for result with retry
+                let result = null;
+                for (let i = 0; i < 6; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                    const resultData = await resultResponse.json();
+                    
+                    if (resultData.success && resultData.result) {
+                        result = resultData.result;
+                        break;
+                    }
+                }
                 
-                const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
-                const resultData = await resultResponse.json();
-                
-                if (resultData.success && resultData.result) {
-                    displayScreenshot(resultData.result);
+                if (result) {
+                    displayScreenshot(result);
+                    showNotification('Screenshot captured!', 'success');
                 } else {
-                    document.getElementById('screenshotContainer').innerHTML = '<div class="loading">❌ Failed to capture screenshot</div>';
+                    document.getElementById('screenshotContainer').innerHTML = '<div class="loading">❌ No response from client. Make sure client is running.</div>';
+                    showNotification('Screenshot failed - client not responding', 'error');
                 }
             } catch (error) {
                 showNotification('Error: ' + error.message, 'error');

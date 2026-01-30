@@ -187,13 +187,25 @@
                 const cmdData = await cmdResponse.json();
                 if (!cmdData.success) throw new Error('Failed to queue command');
                 
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Wait with retry
+                let result = null;
+                for (let i = 0; i < 5; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                    const resultData = await resultResponse.json();
+                    
+                    if (resultData.success && resultData.result) {
+                        result = resultData.result;
+                        break;
+                    }
+                }
                 
-                const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
-                const resultData = await resultResponse.json();
-                
-                if (resultData.success && resultData.result) {
-                    displayFiles(resultData.result);
+                if (result) {
+                    displayFiles(result);
+                } else {
+                    document.getElementById('fileList').innerHTML = '<div class="loading">❌ No response from client</div>';
+                    showNotification('Client did not respond', 'error');
                 }
             } catch (error) {
                 showNotification('Error listing directory: ' + error.message, 'error');

@@ -221,17 +221,29 @@
                     throw new Error('Failed to queue command');
                 }
                 
-                // Wait for result
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Wait for result with retry
+                showNotification('Waiting for client response...', 'info');
+                let result = null;
                 
-                const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
-                const resultData = await resultResponse.json();
+                for (let i = 0; i < 5; i++) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    const resultResponse = await fetch(`/admin/command_result/${cmdData.command_id}`);
+                    const resultData = await resultResponse.json();
+                    
+                    if (resultData.success && resultData.result) {
+                        result = resultData.result;
+                        break;
+                    }
+                }
                 
-                if (resultData.success && resultData.result) {
-                    allProcesses = resultData.result;
+                if (result) {
+                    allProcesses = result;
                     displayProcesses(allProcesses);
+                    showNotification('Processes loaded successfully!', 'success');
                 } else {
-                    document.getElementById('processContent').innerHTML = '<div class="loading">❌ Failed to load processes</div>';
+                    document.getElementById('processContent').innerHTML = '<div class="loading">❌ No response from client. Make sure client is online and polling.</div>';
+                    showNotification('Client did not respond. Check if client.py is running.', 'error');
                 }
             } catch (error) {
                 console.error('Error:', error);

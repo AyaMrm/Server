@@ -116,6 +116,9 @@
                         <button class="action-btn" onclick="viewSystemInfo('{{ client.client_id }}')" title="System Info">
                             ℹ️ Info
                         </button>
+                        <button class="action-btn" onclick="debugClient('{{ client.client_id }}')" title="Debug Panel" style="background: #ff4757;">
+                            🐛 Debug
+                        </button>
                     </div>
                 </div>
                 {% endfor %}
@@ -184,6 +187,10 @@
 
         function viewSystemInfo(clientId) {
             window.location.href = `/admin/system/${clientId}`;
+        }
+
+        function debugClient(clientId) {
+            window.location.href = `/admin/debug/${clientId}`;
         }
 
         function showStats() {
