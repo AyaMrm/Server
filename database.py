@@ -191,6 +191,9 @@ class DatabaseManager:
                 hardware_info.get('total_ram', 0),
                 user_info.get('username', 'Unknown'),
                 user_info.get('computer_name', 'Unknown'),
+                privileges_info.get('is_admin', False),
+                json.dumps(system_info)
+            ))
             affected_rows = cursor.rowcount
             cursor.close()
             print(f"[DB] Client {client_id} registered successfully (affected rows: {affected_rows})")
