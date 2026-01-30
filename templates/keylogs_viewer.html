@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keylogs - {{ client_id[:16] }}...</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='keylogs_style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🔍 Keylog Viewer</h1>
+        <p>Surveillance des frappes clavier en temps réel</p>
+      </div>
+
+      <div class="client-info">
+        <div class="info-card">
+          <div class="info-label">Client ID</div>
+          <div class="info-value">{{ client_id[:16] }}...</div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-label">Hostname</div>
+          <div class="info-value">{{ hostname }}</div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-label">Utilisateur</div>
+          <div class="info-value">{{ username }}</div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-label">Système</div>
+          <div class="info-value">{{ os_name }}</div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-label">Statut</div>
+          <div
+            class="info-value {% if is_online %}status-online{% else %}status-offline{% endif %}"
+          >
+            {% if is_online %}🟢 En ligne{% else %}🔴 Hors ligne{% endif %}
+          </div>
+        </div>
+
+        <div class="info-card">
+          <div class="info-label">Total Logs</div>
+          <div class="info-value">{{ total_logs }}</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-primary" onclick="window.location.reload()">
+          🔄 Actualiser
+        </button>
+
+        <div class="search-box">
+          <input
+            type="text"
+            id="searchBox"
+            placeholder="🔍 Rechercher dans les logs..."
+            onkeyup="filterLogs()"
+          />
+        </div>
+
+        <div class="auto-refresh-container">
+          <input
+            type="checkbox"
+            id="autoRefresh"
+            onchange="toggleAutoRefresh()"
+          />
+          <label for="autoRefresh">Auto-refresh (5s)</label>
+        </div>
+
+        <a href="/admin/clients" class="btn btn-secondary"
+          >⬅️ Retour aux clients</a
+        >
+      </div>
+
+      <div class="logs-container" id="logsContainer">
+        {% if logs %} {% for log in logs %}
+        <div
+          class="log-entry"
+          data-searchable="{{ log.key|lower }} {{ log.window|lower }}"
+        >
+          <div class="log-timestamp">⏰ {{ log.timestamp }}</div>
+          <div class="log-key">{{ log.key }}</div>
+          <div class="log-window">🪟 Fenêtre: {{ log.window }}</div>
+        </div>
+        {% endfor %} {% else %}
+        <div class="no-logs">Aucun keylog disponible pour ce client</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <script>
+      let autoRefreshInterval = null;
+
+      function filterLogs() {
+        const searchTerm = document
+          .getElementById("searchBox")
+          .value.toLowerCase();
+        const logEntries = document.querySelectorAll(".log-entry");
+
+        logEntries.forEach((entry) => {
+          const searchableText = entry.getAttribute("data-searchable");
+          if (searchableText.includes(searchTerm)) {
+            entry.style.display = "block";
+          } else {
+            entry.style.display = "none";
+          }
+        });
+      }
+
+      function toggleAutoRefresh() {
+        const isChecked = document.getElementById("autoRefresh").checked;
+
+        if (isChecked) {
+          autoRefreshInterval = setInterval(() => {
+            window.location.reload();
+          }, 5000);
+        } else {
+          if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+          }
+        }
+      }
+
+      // Auto-scroll to bottom on page load
+      window.addEventListener("load", () => {
+        const logsContainer = document.getElementById("logsContainer");
+        logsContainer.scrollTop = logsContainer.scrollHeight;
+      });
+    </script>
+  </body>
+</html>
