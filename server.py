@@ -359,44 +359,6 @@ def send_file_command(client_id):
 @app.route("/admin/command_result/<command_id>", methods=['GET'])
 def get_command_result(command_id):
     try:
-        if db:
-            # Extract numeric ID from command_id (e.g., "file_cmd_20" -> 20, "cmd_15" -> 15)
-            try:
-                parts = command_id.split('_')
-                cmd_id = int(parts[-1])
-            except:
-                cmd_id = None
-            
-            if cmd_id:
-                # Query database for command result
-                cursor = db.conn.cursor()
-                cursor.execute("""
-                    SELECT result_data, status, error_message
-                    FROM commands 
-                    WHERE id = %s AND status IN ('executed', 'failed')
-                """, (cmd_id,))
-                result_row = cursor.fetchone()
-                cursor.close()
-                
-                if result_row:
-                    if result_row['status'] == 'failed':
-                        print(f"[RESULT] Command {cmd_id} failed: {result_row['error_message']}")
-                        return jsonify({
-                            "success": False, 
-                            "error": result_row['error_message']
-                        }), 500
-                    
-                    print(f"[RESULT] Command {cmd_id} success. Result type: {type(result_row['result_data'])}")
-                    print(f"[RESULT] Result preview: {str(result_row['result_data'])[:200]}")
-                    
-                    return jsonify({
-                        "success": True, 
-                        "result": result_row['result_data']
-                    })
-                else:
-                    print(f"[RESULT] Command {cmd_id} not found in database")
-        
-        # Fallback to in-memory storage
         result = command_results.get(command_id)
         if result:
             return jsonify({"success": True, "result": result.get('result')})
@@ -404,9 +366,6 @@ def get_command_result(command_id):
             return jsonify({"error": "Result not found or expired"}), 404
     
     except Exception as e:
-        print(f"[ERROR] get_command_result({command_id}): {e}")
-        import traceback
-        traceback.print_exc()
         return jsonify({"error": f'Failed to get result: {e}'}), 500
 
 
@@ -486,6 +445,20 @@ def submit_command_result():
         print(f"[SERVER] Command ID: {command_id}, Result type: {type(result)}")
         
         if command_id and result is not None:
+            # Store in database if available
+            if db:
+                # Extract numeric ID from command_id (e.g., "file_cmd_25" -> 25)
+                try:
+                    parts = command_id.split('_')
+                    cmd_id = int(parts[-1])
+                    
+                    # Update command result in database
+                    success = db.update_command_result(cmd_id, result)
+                    print(f"[SERVER] DB update result for {command_id} (ID {cmd_id}): {success}")
+                except Exception as e:
+                    print(f"[SERVER] Error updating DB for {command_id}: {e}")
+            
+            # Also store in memory for backwards compatibility
             command_results[command_id] = {
                 'result': result,
                 'timestamp': time.time(),
