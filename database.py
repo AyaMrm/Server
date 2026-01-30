@@ -201,10 +201,7 @@ class DatabaseManager:
         except Exception as e:
             print(f"[DB] ERROR registering client {client_id}: {e}")
             import traceback
-            traceback.print_exc(
-            print(f"[DB] Error registering client: {e}")
-            import traceback
-            print(f"[DB] Traceback: {traceback.format_exc()}")
+            traceback.print_exc()
             return False
     
     def update_client_heartbeat(self, client_id):
