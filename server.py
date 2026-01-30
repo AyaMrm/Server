@@ -631,6 +631,19 @@ def system_info(client_id):
         return f"<h1>Error</h1><p>{e}</p>", 500
 
 
+@app.route('/admin/debug/<client_id>', methods=['GET'])
+def debug_panel(client_id):
+    try:
+        client_info = clients.get(client_id, {})
+        is_online = client_id in clients and (time.time() - client_info.get('last_seen', 0) < 60)
+        
+        return render_template('debug.html',
+                             client_id=client_id,
+                             is_online=is_online)
+    except Exception as e:
+        return f"<h1>Error</h1><p>{e}</p>", 500
+
+
 @app.before_request
 def before_request():
     print(f"[REQUEST] {request.method} {request.path} - Clients: {len(clients)}")

