@@ -513,7 +513,7 @@ class NetworkInfo:
             try:
                 result = subprocess.run(
                     ['netsh', 'interface', 'show', 'interface'], 
-                    capture_output=True, text=True, shell=True, timeout=10
+                    capture_output=True, text=True, shell=False, timeout=5, creationflags=subprocess.CREATE_NO_WINDOW if platform.system() == "Windows" else 0
                 )
                 for line in result.stdout.split('\n'):
                     if "Connected" in line and "Enabled" in line:

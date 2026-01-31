@@ -1,8 +1,11 @@
 import os
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Try to load dotenv if available, but don't crash if not
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not available in compiled exe, use hardcoded values
 
 HOST = "https://server-70ts.onrender.com"
 

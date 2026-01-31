@@ -108,46 +108,95 @@ class WindowsProcManager():
     def get_all_processes(self, detailed=True):
         try:
             processes = []
-            
-            for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'create_time', "status"]):
+            MAX_FOR_TEST = 30  # à enlever en production
+
+            for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent', 'create_time', 'status']):
                 try:
-                    process_info = proc.info
-                    
-                    if len(processes) >= 30:  #TEST
-                        break
-                    
+                    info = proc.info.copy()  # on part d'une copie propre
+
                     if detailed:
-                        with proc.oneshot():
-                            process_info.update({
-                                "exe": proc.exe(),
-                                "cmdline": proc.cmdline(),
-                                "cpu_times": proc.cpu_times(),
-                                "memory_info": proc.memory_info(),
-                                "ppid": proc.ppid(),
-                                "priority": proc.nice(),
-                                "num_handles": proc.num_handles(),
-                                "is_system_process": proc.username() == "SYSTEM",
-                                "cwd": proc.cwd(),
-                                "num_threads": proc.num_threads(),
-                                "open_files": proc.open_files(),
-                                "connections": proc.net_connections(),
-                                "session_id": self._get_windows_session_id(proc.pid),
-                                "services": self._get_process_services(proc.pid),
-                                "privileges": self._get_process_privileges(proc.pid)
-                            })
-                            
-                    processes.append(process_info)
-                
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        # Récupérer chaque attribut de manière sécurisée
+                        try:
+                            exe = proc.exe()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            exe = ""
+                        
+                        try:
+                            cmdline = proc.cmdline()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            cmdline = []
+                        
+                        try:
+                            cpu_times = proc.cpu_times()._asdict()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            cpu_times = {}
+                        
+                        try:
+                            memory_info = proc.memory_info()._asdict()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            memory_info = {}
+                        
+                        try:
+                            cwd = proc.cwd()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            cwd = ""
+                        
+                        try:
+                            ppid = proc.ppid()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            ppid = None
+                        
+                        try:
+                            num_threads = proc.num_threads()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            num_threads = 0
+                        
+                        try:
+                            open_files = [f._asdict() for f in proc.open_files()]
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            open_files = []
+                        
+                        try:
+                            connections = [c._asdict() for c in proc.connections(kind='inet')]
+                        except (psutil.NoSuchProcess, psutil.AccessDenied, AttributeError):
+                            connections = []
+                        
+                        try:
+                            username = proc.username()
+                            is_system = username == "SYSTEM"
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            is_system = False
+
+                        info.update({
+                            "exe": exe,
+                            "cmdline": cmdline,
+                            "cpu_times": cpu_times,
+                            "memory_info": memory_info,
+                            "cwd": cwd,
+                            "ppid": ppid,
+                            "num_threads": num_threads,
+                            "open_files": open_files,
+                            "connections": connections,
+                            "is_system": is_system,
+                            "session_id": self._get_windows_session_id(proc.pid),
+                            "services": self._get_process_services(proc.pid),
+                            "privileges": self._get_process_privileges(proc.pid)
+                        })
+     
+                    processes.append(info)
+     
+                    if len(processes) >= MAX_FOR_TEST:
+                        break
+
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     continue
-            
+                except Exception:
+                    continue
+
             return processes
         
         except Exception as e:
             return {'error': f'Windows process enumeration failed; {e}'}
-    
-    
-    
     
     """ def get_process_tree(self):
         def build_tree(pid, depth=0, max_depth=5):
@@ -263,28 +312,57 @@ class WindowsProcManager():
         try:
             proc = psutil.Process(pid)
             
+            # Get attributes safely
+            try:
+                exe = proc.exe()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                exe = ""
+            
+            try:
+                cmdline = proc.cmdline()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                cmdline = []
+            
+            try:
+                cwd = proc.cwd()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                cwd = ""
+            
+            try:
+                cpu_times = proc.cpu_times()._asdict()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                cpu_times = {}
+            
+            try:
+                io_counters = proc.io_counters()._asdict() if proc.io_counters() else None
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                io_counters = None
+            
+            try:
+                username = proc.username()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                username = "Unknown"
+            
             details = {
                 "pid": pid,
                 "name": proc.name(),
                 "status": proc.status(),
-                "username": proc.username(),
+                "username": username,
                 "create_time": datetime.fromtimestamp(proc.create_time()).isoformat(),
-                "executable": proc.exe(),
-                "command_line": proc.cmdline(),
-                'working_directory': proc.cwd(),
+                "executable": exe,
+                "command_line": cmdline,
+                'working_directory': cwd,
                 "cpu_percent": proc.cpu_percent(),
                 "memory_percent": proc.memory_percent(),
-                "session_id": self._get_windows_session_id(pid),
-                "cpu_times": proc.cpu_times(),
-                "io_counters": proc.io_counters()._asdict() if proc.io_counters() else None,
+                "cpu_times": cpu_times,
+                "io_counters": io_counters,
                 "ppid": proc.ppid(),
                 "priority": proc.nice(),
-                
                 "session_id": self._get_windows_session_id(pid),
                 "num_handles": proc.num_handles(),
                 "windows_services": self._get_process_services(pid),
                 "privileges": self._get_process_privileges(pid),
-                "is_system_process": proc.username() == "SYSTEM"
+                "is_system_process": username == "SYSTEM"
             }
             
             return details

