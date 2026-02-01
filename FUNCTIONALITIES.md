@@ -158,7 +158,6 @@ Interface en ligne de commande pour :
 
 ```bash
 python compile.py          # Version stealth (--noconsole)
-python compile_debug.py    # Version debug (avec console)
 ```
 
 **Output** : `dist/WindowsUpdate.exe` (~30 MB)
@@ -531,3 +530,4 @@ flowchart TD
     style Encrypt fill:#ffd93d
     style Display fill:#a8e6cf
 ```
+
